@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- The browser tab name. Change the text between the tags. -->
-<title>Farm Together 2 — Farm Planner</title>
+<title>FT2 Planner</title>
 <!--
   ============================================================================
   FARM TOGETHER 2 — FARM PLANNER
@@ -154,6 +154,16 @@ aside{
 .tool.on kbd{color:var(--amber);border-color:var(--line2)}
 .sw{width:14px;height:14px;border-radius:2px;flex:none;border:1px solid rgba(0,0,0,.45)}
 .sw.lg{width:18px;height:18px}
+
+/* resize anchor picker */
+.anchor{display:grid;grid-template-columns:repeat(3,34px);gap:4px;flex:none}
+.anchor button{
+  height:34px;background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);
+  cursor:pointer;color:var(--muted);font:13px/1 var(--mono);
+}
+.anchor button:hover{border-color:var(--line2);color:var(--text)}
+.anchor button.on{background:var(--amber);border-color:var(--amber);color:#241a08}
+.anchor button.on::after{content:"●"}
 
 /* size presets */
 .chip{display:inline-flex;align-items:stretch;background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
@@ -469,7 +479,7 @@ aside{
           <div class="row" style="margin-top:8px">
             <button class="btn sm" id="cfgApply">Resize farm</button>
           </div>
-          <p class="note" style="margin:8px 0 0">Growing the farm keeps everything where it is and adds empty plots to the right and below.</p>
+          <p class="note" style="margin:8px 0 0">You'll be asked where your current layout should sit in the new farm, so you can choose which edges gain or lose plots.</p>
         </div>
         <div class="grp">
           <h3>Back to the file</h3>
@@ -1662,22 +1672,101 @@ async function renderSlots(){
     renderSlots();
   });
 }
+/* Where the layout you already have should sit inside the new grid.
+   [1,1] is the middle; [0,0] is top-left, and so on. */
+let resizeAnchor = [1,1];
+
+/* How many plots join or leave each edge, given the anchor. */
+function resizePlan(cfg, aCol, aRow){
+  const growX = cfg.plotsX - S.cfg.plotsX, growY = cfg.plotsY - S.cfg.plotsY;
+  const share = (n, a) => a===0 ? 0 : a===2 ? n : Math.floor(n/2);   // to the near edge
+  const cut   = (n, a) => a===0 ? 0 : a===2 ? n : Math.ceil(n/2);
+  const left   = growX>0 ? share(growX, aCol) : 0;
+  const top    = growY>0 ? share(growY, aRow) : 0;
+  const cutL   = growX<0 ? cut(-growX, aCol) : 0;
+  const cutT   = growY<0 ? cut(-growY, aRow) : 0;
+  return {
+    growX, growY,
+    addLeft:left, addRight: growX>0 ? growX-left : 0,
+    addTop:top,   addBottom:growY>0 ? growY-top : 0,
+    cutLeft:cutL, cutRight: growX<0 ? -growX-cutL : 0,
+    cutTop:cutT,  cutBottom:growY<0 ? -growY-cutT : 0,
+    offX:left*cfg.plotW, offY:top*cfg.plotH,
+    srcX:cutL*S.cfg.plotW, srcY:cutT*S.cfg.plotH
+  };
+}
+/* Painted tiles that would fall outside the new edges. */
+function tilesLost(plan, nW, nH){
+  const copyW = Math.min(S.W-plan.srcX, nW-plan.offX), copyH = Math.min(S.H-plan.srcY, nH-plan.offY);
+  let n = 0;
+  for(let y=0;y<S.H;y++){
+    const inRow = y>=plan.srcY && y<plan.srcY+copyH;
+    for(let x=0;x<S.W;x++){
+      if(inRow && x>=plan.srcX && x<plan.srcX+copyW) continue;
+      const i = y*S.W+x;
+      if(S.type[i]!==0 || S.item[i]!==0) n++;
+    }
+  }
+  return n;
+}
 $("#cfgApply").onclick = () => {
   const cfg = { plotsX:+$("#cfgPX").value, plotsY:+$("#cfgPY").value,
                 plotW:+$("#cfgTW").value, plotH:+$("#cfgTH").value };
   for(const v of Object.values(cfg)) if(!(v>=1 && v<=200)) return flash("Sizes must be between 1 and 200.");
   const nW = cfg.plotsX*cfg.plotW, nH = cfg.plotsY*cfg.plotH;
   if(nW*nH > 400000) return flash("That's over 400,000 tiles — too big to stay smooth.");
-  const shrinking = nW < S.W || nH < S.H;
-  if(shrinking && !confirm("The farm gets smaller — anything outside the new edge is thrown away. Continue?")) return;
+  if(nW===S.W && nH===S.H) return flash("That's the size it already is.");
+  askResize(cfg, nW, nH);
+};
+
+function askResize(cfg, nW, nH){
+  const label = ["top-left","top","top-right","left","centre","right","bottom-left","bottom","bottom-right"];
+  openModal("Resize the farm", `
+    <p class="note" style="margin:0">
+      <b>${S.cfg.plotsX}×${S.cfg.plotsY}</b> → <b>${cfg.plotsX}×${cfg.plotsY}</b> plots.
+      Choose where your current layout should sit in the new farm.</p>
+    <div style="display:flex;gap:16px;align-items:flex-start">
+      <div class="anchor" id="anchorGrid">${
+        [0,1,2].map(r => [0,1,2].map(c =>
+          `<button data-c="${c}" data-r="${r}" title="${label[r*3+c]}"></button>`).join("")).join("")}</div>
+      <div class="note" id="anchorSummary" style="flex:1"></div>
+    </div>`,
+    [{label:"Cancel", act:closeModal},
+     {label:"Resize", primary:true, act:()=>{ closeModal(); applyResize(cfg, nW, nH); }}]);
+
+  const paint = () => {
+    $$("#anchorGrid button").forEach(b =>
+      b.classList.toggle("on", +b.dataset.c===resizeAnchor[0] && +b.dataset.r===resizeAnchor[1]));
+    const plan = resizePlan(cfg, resizeAnchor[0], resizeAnchor[1]);
+    const bits = [];
+    const say = (n, where, verb) => { if(n) bits.push(`${n} ${n>1?"plots":"plot"} ${verb} ${where}`); };
+    say(plan.addLeft,"on the left","added");   say(plan.addRight,"on the right","added");
+    say(plan.addTop,"above","added");          say(plan.addBottom,"below","added");
+    say(plan.cutLeft,"from the left","removed"); say(plan.cutRight,"from the right","removed");
+    say(plan.cutTop,"from the top","removed");   say(plan.cutBottom,"from the bottom","removed");
+    const lost = tilesLost(plan, nW, nH);
+    $("#anchorSummary").innerHTML = (bits.length ? bits.join("<br>") : "Nothing changes.")
+      + (lost ? `<br><br><b style="color:var(--danger)">${lost.toLocaleString()} painted tile${lost>1?"s":""} thrown away.</b>` : "");
+  };
+  $$("#anchorGrid button").forEach(b => b.onclick = () => {
+    resizeAnchor = [+b.dataset.c, +b.dataset.r]; paint();
+  });
+  paint();
+}
+
+function applyResize(cfg, nW, nH){
+  const { offX, offY, srcX, srcY } = resizePlan(cfg, resizeAnchor[0], resizeAnchor[1]);
   const type = new Uint8Array(nW*nH), item = new Uint16Array(nW*nH);
-  for(let y=0;y<Math.min(nH,S.H);y++) for(let x=0;x<Math.min(nW,S.W);x++){
-    type[y*nW+x] = S.type[y*S.W+x]; item[y*nW+x] = S.item[y*S.W+x];
+  const copyW = Math.min(S.W-srcX, nW-offX), copyH = Math.min(S.H-srcY, nH-offY);
+  for(let y=0;y<copyH;y++) for(let x=0;x<copyW;x++){
+    const d = (y+offY)*nW + (x+offX), o = (y+srcY)*S.W + (x+srcX);
+    type[d] = S.type[o]; item[d] = S.item[o];
   }
   S.cfg = cfg; S.W = nW; S.H = nH; S.type = type; S.item = item;
   undoStack.length = redoStack.length = 0; sel = null;
-  afterEdit(); refreshFarmUI(); fitView(); flash(`${S.name} is now ${nW} × ${nH} tiles.`);
-};
+  afterEdit(); refreshFarmUI(); fitView();
+  flash(`${S.name} is now ${cfg.plotsX}×${cfg.plotsY} plots — ${nW} × ${nH} tiles.`);
+}
 $("#wipeBtn").onclick = () => {
   if(!confirm(`Set every tile in "${S.name}" back to grass? Other sub-farms and your content list are untouched.`)) return;
   writeRect({x0:0,y0:0,x1:S.W-1,y1:S.H-1}, ()=>[0,0]);
