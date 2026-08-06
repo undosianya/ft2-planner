@@ -125,4 +125,3 @@ useful; the game is theirs.
      domain. Delete this section if you'd rather not license it.            -->
 
 MIT — see [LICENSE](LICENSE). Take it, change it, share it.
-# ft2-planner
