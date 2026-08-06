@@ -305,7 +305,7 @@ aside{
 #status .sel{color:var(--amber)}
 .panelfoot{
   flex:none;padding:7px 11px;border-top:1px solid var(--line);
-  font:10px/1 var(--mono);color:var(--muted);opacity:.5;
+  font:10px/1.6 var(--mono);color:var(--muted);opacity:.5;
 }
 
 /* ==========================================================================
@@ -330,6 +330,7 @@ aside{
 .modal .foot{padding:12px 16px;border-top:1px solid var(--line);display:flex;gap:7px;justify-content:flex-end}
 .modal label{display:block;font:10px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
 .helpgrid{display:grid;grid-template-columns:auto 1fr;gap:5px 14px;align-items:baseline}
+.helpgrid .keys{white-space:nowrap;display:flex;align-items:baseline;gap:3px}
 .helpgrid kbd{
   font:11px/1 var(--mono);border:1px solid var(--line2);border-radius:3px;
   padding:3px 6px;background:var(--panel2);white-space:nowrap;
@@ -754,6 +755,7 @@ let tool = "paint";
 let brush = { type:1, item:0 };   // item 0 = nothing planted
 let sel = null;                   // {x0,y0,x1,y1}
 let clip = null;                  // copied region
+let toolBeforeStamp = "paint";    // tool to return to when the paste is dropped
 let hover = null, lastTile = null;
 let hoverField = null, hoverFieldKey = -1;   // the block under the cursor, when snapping to fields
 let drag = null;
@@ -1581,9 +1583,10 @@ cv.addEventListener("wheel", e => {
    whatever ground type or crop is loaded. */
 function cancelHold(){
   const had = sel ? "selection" : (tool==="stamp" ? "paste" : null);
+  const back = tool==="stamp" ? toolBeforeStamp : "paint";
   sel = null;
-  if(tool!=="paint") setTool("paint"); else { renderToolOpts(); draw(); updateStatus(); }
-  if(had) flash(`Dropped the ${had} — back to painting.`);
+  if(tool!==back) setTool(back); else { renderToolOpts(); draw(); updateStatus(); }
+  if(had) flash(`Dropped the ${had} — back to ${back==="select" ? "selecting" : "painting"}.`);
 }
 
 function pickAt(tx,ty){
@@ -1625,11 +1628,11 @@ addEventListener("keydown", e => {
   if((e.ctrlKey||e.metaKey) && k==="z"){ e.preventDefault(); e.shiftKey?redo():undo(); return; }
   if((e.ctrlKey||e.metaKey) && k==="y"){ e.preventDefault(); redo(); return; }
   if((e.ctrlKey||e.metaKey) && k==="c"){ e.preventDefault(); copySel(); return; }
-  if((e.ctrlKey||e.metaKey) && k==="v"){ e.preventDefault(); if(clip) setTool("stamp"); return; }
+  if((e.ctrlKey||e.metaKey) && k==="v"){ e.preventDefault(); if(clip){ toolBeforeStamp = tool; setTool("stamp"); } return; }
   if(e.ctrlKey||e.metaKey||e.altKey) return;
   if(k==="escape"){ cancelHold(); return; }
-  if(k==="f"){ fitView(); return; }
-  if(k==="r"){ rotateFixed(); return; }
+  if(k==="f"){ if(clip) transformClip(e.shiftKey ? "v" : "h"); return; }
+  if(k==="r"){ if(clip) transformClip("rotate"); else rotateFixed(); return; }
   if(k==="delete"||k==="backspace"){ if(sel) clearSelection(); return; }
   if(k==="enter"){ if(sel) writeRect(sel, brushPaint()); return; }
   if(k in KEYMAP){
@@ -1746,8 +1749,9 @@ function copySel(){
   for(let y=0;y<=h;y++) for(let x=0;x<=w;x++)
     edge[y*(w+1)+x] = S.edge[eIdx(sel.x0+x, sel.y0+y)];
   clip = { w, h, type, item, edge };
+  toolBeforeStamp = tool;
   setTool("stamp");
-  flash(`Copied ${w} × ${h} — click to paste it. Esc when you're done.`);
+  flash(`Copied ${w} × ${h} — click to paste, R to rotate, F to flip. Esc when you're done.`);
   updateStatus();
 }
 $("#selFill").onclick  = () => sel ? writeRect(sel, brushPaint()) : flash("Nothing selected.");
@@ -1764,13 +1768,61 @@ $("#fillPlot").onclick = () => {
   fillPlotAt(t[0], t[1]);
   flash(`Filled plot ${colName(Math.floor(t[0]/S.cfg.plotW))}${Math.floor(t[1]/S.cfg.plotH)+1}.`);
 };
-$("#selPaste").onclick = () => clip ? setTool("stamp") : flash("Select an area and Copy it first.");
+$("#selPaste").onclick = () => { if(clip){ toolBeforeStamp = tool; setTool("stamp"); } else flash("Select an area and Copy it first."); };
 function rotateFixed(){
   const w = $("#fixW").value; $("#fixW").value = $("#fixH").value; $("#fixH").value = w;
   setBrush(brush.type, brush.item);
   flash(`Now placing ${fixW()} × ${fixH()}.`);
 }
 $("#fixSwap").onclick = rotateFixed;
+function rotateClipData(c){
+  const {w,h,type,item,edge} = c;
+  const nw = h, nh = w;
+  const nType = new Uint8Array(nw*nh), nItem = new Uint16Array(nw*nh);
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+    const j = x*nw + (h-1-y), i = y*w+x;
+    nType[j] = type[i]; nItem[j] = item[i];
+  }
+  const nStride = nw+1;
+  const nEdge = new Uint8Array(nStride*(nh+1));
+  for(let y=0;y<=h;y++) for(let x=0;x<=w;x++){
+    const v = edge[y*(w+1)+x];
+    if(!v) continue;
+    if(v & EDGE_H && x<w) nEdge[x*nStride + (h-y)]   |= EDGE_V;
+    if(v & EDGE_V && y<h) nEdge[x*nStride + (h-1-y)] |= EDGE_H;
+  }
+  return { w:nw, h:nh, type:nType, item:nItem, edge:nEdge };
+}
+function flipClipData(c, axis){
+  const {w,h,type,item,edge} = c;
+  const nType = new Uint8Array(w*h), nItem = new Uint16Array(w*h);
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+    const i = y*w+x;
+    const j = axis==="h" ? y*w+(w-1-x) : (h-1-y)*w+x;
+    nType[j] = type[i]; nItem[j] = item[i];
+  }
+  const stride = w+1;
+  const nEdge = new Uint8Array(stride*(h+1));
+  for(let y=0;y<=h;y++) for(let x=0;x<=w;x++){
+    const v = edge[y*stride+x];
+    if(!v) continue;
+    if(axis==="h"){
+      if(v & EDGE_H && x<w) nEdge[y*stride + (w-1-x)] |= EDGE_H;
+      if(v & EDGE_V)        nEdge[y*stride + (w-x)]   |= EDGE_V;
+    } else {
+      if(v & EDGE_H)        nEdge[(h-y)*stride + x]   |= EDGE_H;
+      if(v & EDGE_V && y<h) nEdge[(h-1-y)*stride + x] |= EDGE_V;
+    }
+  }
+  return { w, h, type:nType, item:nItem, edge:nEdge };
+}
+function transformClip(kind){
+  if(!clip) return;
+  clip = kind==="rotate" ? rotateClipData(clip) : flipClipData(clip, kind);
+  draw();
+  flash(kind==="rotate" ? `Rotated — now ${clip.w} × ${clip.h}.`
+      : kind==="h" ? "Flipped horizontally." : "Flipped vertically.");
+}
 ["fixOn","fixW","fixH"].forEach(id => { $("#"+id).oninput = draw; $("#"+id).onchange = draw; });
 function renderPresets(){
   const el = $("#fixPresets");
@@ -2398,14 +2450,15 @@ $("#helpBtn").onclick = () => openModal("Shortcuts", `
     <kbd>V</kbd><span>Paste what you copied</span>
     <kbd>E</kbd><span>Fence around a rectangle</span>
     <kbd>I</kbd><span>Pick up what's on a tile</span>
-    <kbd>H</kbd> / <span>hold <b>space</b> — pan</span>
-    <kbd>R</kbd><span>Rotate the exact rectangle</span>
-    <kbd>Ctrl</kbd>+<kbd>C</kbd><span>Copy the selection</span>
-    <kbd>Ctrl</kbd>+<kbd>V</kbd><span>Switch to stamping</span>
+    <span class="keys"><kbd>H</kbd> / hold <kbd>space</kbd></span><span>Pan</span>
+    <kbd>R</kbd><span>Rotate the exact rectangle, or what you copied</span>
+    <kbd>F</kbd><span>Flip what you copied horizontally</span>
+    <span class="keys"><kbd>Shift</kbd>+<kbd>F</kbd></span><span>Flip what you copied vertically</span>
+    <span class="keys"><kbd>Ctrl</kbd>+<kbd>C</kbd></span><span>Copy the selection</span>
+    <span class="keys"><kbd>Ctrl</kbd>+<kbd>V</kbd></span><span>Switch to stamping</span>
     <kbd>Enter</kbd><span>Fill the selection with the current brush</span>
     <kbd>Delete</kbd><span>Clear the selection back to grass</span>
-    <kbd>Ctrl</kbd>+<kbd>Z</kbd><span>Undo · add Shift to redo</span>
-    <kbd>F</kbd><span>Fit the whole farm on screen</span>
+    <span class="keys"><kbd>Ctrl</kbd>+<kbd>Z</kbd></span><span>Undo · add Shift to redo</span>
     <kbd>Esc</kbd><span>Drop the selection and go back to painting</span>
   </div>
   <p class="note"><b>Snapping a fence to a field</b> traces the connected run of identical tiles you click and wraps it, so one click fences a whole crop block without measuring anything.</p>
@@ -2439,7 +2492,7 @@ function renderVersion(){
     el.textContent = "build: dev";
     return;
   }
-  el.textContent = `build: ${sha} · ${d.toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"})}`;
+  el.innerHTML = `build: ${sha}<br>${d.toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"})}`;
   el.title = `Built ${d.toISOString().replace("T"," ").slice(0,16)} UTC`;
 }
 async function boot(){
