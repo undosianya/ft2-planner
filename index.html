@@ -114,6 +114,11 @@ button,input,select,textarea{font:inherit;color:inherit}
   padding:5px 7px;width:100%;
 }
 .field:focus{border-color:var(--line2)}
+/* The spinners sat under the click target on these narrow boxes, so a click
+   landed on an arrow and nudged the value. */
+input[type=number]{-moz-appearance:textfield;appearance:textfield}
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;appearance:none;margin:0}
 input[type=color]{padding:0;height:26px;width:34px;border:1px solid var(--line);border-radius:var(--r);background:var(--ink);cursor:pointer}
 label.check{display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--muted)}
 label.check:hover{color:var(--text)}
@@ -173,19 +178,52 @@ aside{
 .chip i:hover{color:var(--danger);background:var(--panel3)}
 .chip.add b{color:var(--sprout)}
 
-/* brush readout */
-#brushcard{display:flex;align-items:center;gap:9px;background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);padding:8px 9px}
-#brushcard .nm{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#brushcard .sub{font:11px/1.2 var(--mono);color:var(--muted)}
-
 /* ==========================================================================
    STAGE / CANVAS
    ========================================================================== */
-#stage{flex:1;min-width:0;position:relative;background:var(--ink)}
+#stage{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--ink)}
+#stagebar{
+  flex:none;display:flex;align-items:center;gap:9px;padding:0 11px;height:38px;
+  background:var(--panel);border-bottom:1px solid var(--line);
+}
+#stagebar label{font:600 10px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+#stagebar #brushName{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
+#stagebar #brushSub{font:11px/1 var(--mono);color:var(--muted);white-space:nowrap}
+#canvaswrap{flex:1;min-height:0;position:relative}
+[hidden]{display:none!important}
+#plantBox{display:flex;align-items:center;gap:8px;padding-left:9px;border-left:1px solid var(--line)}
+.picker{position:relative}
+.pickbtn{
+  display:flex;align-items:center;gap:7px;cursor:pointer;
+  background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);padding:4px 8px;
+}
+.pickbtn:hover{border-color:var(--line2)}
+.pickbtn i{font-style:normal;color:var(--muted);font-size:10px}
+.pickmenu{
+  position:absolute;top:calc(100% + 5px);left:0;z-index:30;min-width:200px;padding:4px;
+  background:var(--panel);border:1px solid var(--line2);border-radius:var(--r);
+  box-shadow:0 12px 34px rgba(0,0,0,.55);
+}
+.pickrow{
+  display:flex;align-items:center;gap:9px;width:100%;text-align:left;cursor:pointer;
+  background:transparent;border:0;border-radius:3px;padding:6px 8px;
+}
+.pickrow:hover{background:var(--panel2)}
+.pickrow.on{background:var(--panel3)}
+.pickrow i{margin-left:auto;font:10px/1 var(--mono);color:var(--muted);font-style:normal}
+.toolopts{display:none}
+.toolopts.on{display:block}
 #cv{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
 #cv.panning{cursor:grabbing}
 #cv.panready{cursor:grab}
 #cv.picking{cursor:copy}
+#tip{
+  position:absolute;pointer-events:none;z-index:5;
+  background:rgba(23,19,16,.95);border:1px solid var(--line2);border-radius:var(--r);
+  padding:4px 8px;font-size:12px;white-space:nowrap;
+  box-shadow:0 4px 14px rgba(0,0,0,.45);
+}
+#tip i{font-style:normal;color:var(--muted);font-size:11px}
 #zoomdock{
   position:absolute;right:10px;bottom:10px;display:flex;gap:4px;align-items:center;
   background:rgba(33,27,22,.92);border:1px solid var(--line);border-radius:var(--r);padding:4px;
@@ -315,7 +353,7 @@ aside{
 <body>
 
 <header id="topbar">
-  <div class="brand"><b>Farm&nbsp;Planner</b></div>
+  <div class="brand"><b title="Farm Together 2 — Farm Planner">Farm&nbsp;Planner</b></div>
   <select class="selmini" id="farmSel" title="Farm"></select>
   <select class="selmini" id="subSel" title="Sub-farm"></select>
   <span class="savestate" id="dimlabel">—</span>
@@ -340,46 +378,57 @@ aside{
         <div class="col" id="tools"></div>
       </div>
 
-      <div class="grp">
-        <h3>Painting with</h3>
-        <div id="brushcard">
-          <span class="sw lg" id="brushSw"></span>
-          <div style="min-width:0">
-            <div class="nm" id="brushName">Grass</div>
-            <div class="sub" id="brushSub">tile type</div>
-          </div>
+      <!-- Only the options belonging to the current tool are shown. -->
+      <div class="grp toolopts" id="optsPaint">
+        <h3>Paint</h3>
+        <label class="check"><input type="checkbox" id="fixOn"> Place an exact rectangle</label>
+        <div class="row tight" style="align-items:center;margin-top:7px">
+          <input class="field" id="fixW" type="number" min="1" max="400" value="18" style="width:54px">
+          <span style="color:var(--muted)">×</span>
+          <input class="field" id="fixH" type="number" min="1" max="400" value="3" style="width:54px">
+          <button class="btn sm" id="fixSwap" title="Rotate (R)">Rotate</button>
+        </div>
+        <div class="row tight" style="margin-top:6px" id="fixPresets"></div>
+        <div class="row" style="margin-top:9px">
+          <button class="btn sm" id="fillPlot" title="Fill the plot you last pointed at">Fill whole plot</button>
         </div>
       </div>
 
-      <div class="grp">
-        <h3>Tile types</h3>
-        <div class="col" id="types"></div>
-      </div>
-
-      <div class="grp">
+      <div class="grp toolopts" id="optsSelect">
         <h3>Selection</h3>
         <div class="row">
           <button class="btn sm" id="selFill">Fill</button>
           <button class="btn sm" id="selClear">Clear</button>
           <button class="btn sm" id="selNone">Deselect</button>
         </div>
-        <div class="row" style="margin-top:6px">
+        <div class="row" style="margin-top:5px">
           <button class="btn sm" id="selCopy">Copy</button>
           <button class="btn sm" id="selPaste">Paste</button>
-          <button class="btn sm" id="fillPlot" title="Fill the plot you last pointed at">Fill plot</button>
         </div>
+        <p class="note" style="margin:8px 0 0;font-size:11px">Fill uses whatever's in the ground bar above the map.</p>
       </div>
 
-      <div class="grp">
-        <h3>Fixed size</h3>
-        <label class="check"><input type="checkbox" id="fixOn"> Place an exact rectangle</label>
-        <div class="row tight" style="align-items:center;margin-top:7px">
-          <input class="field" id="fixW" type="number" min="1" max="400" value="18" style="width:54px">
-          <span style="color:var(--muted)">×</span>
-          <input class="field" id="fixH" type="number" min="1" max="400" value="3" style="width:54px">
-          <button class="btn sm icon" id="fixSwap" title="Swap width and height">⇄</button>
+      <div class="grp toolopts" id="optsFence">
+        <h3>Fence</h3>
+        <div class="row tight">
+          <button class="btn sm on" id="fenceAdd">Add</button>
+          <button class="btn sm" id="fenceDel">Remove</button>
         </div>
-        <div class="row tight" style="margin-top:6px" id="fixPresets"></div>
+        <div class="row tight" style="margin-top:5px">
+          <button class="btn sm on" id="fenceRect">Rectangle</button>
+          <button class="btn sm" id="fenceOne">Single line</button>
+        </div>
+        <p class="note" style="margin:8px 0 0;font-size:11px">Rectangle fences all four sides at once, and removing takes down every fence inside the rectangle too. Single line follows the nearest boundary and keeps to that direction as you drag. Alt does the opposite of the mode you're in.</p>
+      </div>
+
+      <div class="grp toolopts" id="optsStamp">
+        <h3>Paste</h3>
+        <p class="note" id="clipNote" style="margin:0"></p>
+      </div>
+
+      <div class="grp toolopts" id="optsPick">
+        <h3>Pick up</h3>
+        <p class="note" style="margin:0">Click any tile to load what's on it into the ground bar, then carry on painting with it.</p>
       </div>
 
       <div class="grp">
@@ -387,6 +436,7 @@ aside{
         <div class="col">
           <label class="check"><input type="checkbox" id="optGrid" checked> Tile grid</label>
           <label class="check"><input type="checkbox" id="optPlots" checked> Plot borders</label>
+          <label class="check"><input type="checkbox" id="optFences" checked> Fences</label>
           <label class="check"><input type="checkbox" id="optLabels" checked> Names when zoomed in</label>
           <label class="check"><input type="checkbox" id="optSnap"> Snap edits to plots</label>
         </div>
@@ -396,12 +446,31 @@ aside{
 
   <!-- ================= CENTRE: the farm ================= -->
   <section id="stage">
-    <canvas id="cv"></canvas>
-    <div id="zoomdock">
-      <button class="btn sm icon" id="zOut">−</button>
-      <span class="pct" id="zPct">100%</span>
-      <button class="btn sm icon" id="zIn">+</button>
-      <button class="btn sm" id="zFit">Fit</button>
+    <div id="stagebar">
+      <label>Ground</label>
+      <div class="picker" id="typePick">
+        <button class="pickbtn" id="typeBtn">
+          <span class="sw" id="typeSw"></span><span id="typeLbl"></span><i>▾</i>
+        </button>
+        <div class="pickmenu" id="typeMenu" hidden></div>
+      </div>
+      <span id="plantBox" hidden>
+        <span class="sw lg" id="brushSw"></span>
+        <span id="brushName"></span>
+        <span id="brushSub"></span>
+        <button class="btn sm" id="clearPlant">Bare ground</button>
+      </span>
+      <span class="spacer"></span>
+    </div>
+    <div id="canvaswrap">
+      <canvas id="cv"></canvas>
+      <div id="tip" hidden></div>
+      <div id="zoomdock">
+        <button class="btn sm icon" id="zOut">−</button>
+        <span class="pct" id="zPct">100%</span>
+        <button class="btn sm icon" id="zIn">+</button>
+        <button class="btn sm" id="zFit">Fit</button>
+      </div>
     </div>
   </section>
 
@@ -530,8 +599,13 @@ const TILE_TYPES = [
   { id:2, name:"Road",     color:"#a89c86", key:"R" },
   { id:3, name:"Water",    color:"#2e7fa6", key:"W", plantable:true },
   { id:4, name:"Building", color:"#c1633f", key:"B" },
-  { id:5, name:"Locked",   color:"#35302a", key:"L", hatch:true }
+  { id:5, name:"Locked",      color:"#35302a", key:"L", hatch:true },
+  { id:6, name:"Fast travel",  color:"#a259d9", key:"T", footprint:[1,1] },
+  { id:7, name:"Fuel tank",    color:"#6d8296", key:"U", footprint:[2,1] }
 ];
+
+/* Fences sit on the lines between tiles, not on the tiles themselves. */
+const FENCE_COLOR = "#e0c088";
 
 /* Hue band per category — used only when auto-picking a colour for a new item. */
 const CAT_HUE = {
@@ -545,8 +619,7 @@ const CAT_HUE = {
 
 /* KEYMAP — single-key shortcuts. */
 const KEYMAP = {
-  b:"paint", m:"select", v:"stamp", i:"pick", h:"pan",
-  g:0, p:1, r:2, w:3, "1":0, "2":1, "3":2, "4":3, "5":4, "6":5
+  b:"paint", m:"select", v:"stamp", i:"pick", h:"pan", e:"fence"
 };
 
 const SEED_LIBRARY = {
@@ -669,8 +742,13 @@ const DEFAULT_PRESETS = [[18,3],[24,24],[6,20],[20,20],[40,20]];
 function blankSub(name, cfg){
   const W = cfg.plotsX*cfg.plotW, H = cfg.plotsY*cfg.plotH;
   return { id:uid(), name, cfg:{...cfg}, W, H,
-           type:new Uint8Array(W*H), item:new Uint16Array(W*H) };
+           type:new Uint8Array(W*H), item:new Uint16Array(W*H),
+           /* One entry per grid intersection, (W+1) × (H+1).
+              bit 1 = fence running right from here, bit 2 = fence running down. */
+           edge:new Uint8Array((W+1)*(H+1)) };
 }
+const EDGE_H = 1, EDGE_V = 2;
+const eIdx = (x,y) => y*(S.W+1) + x;
 /* The document: farms hold sub-farms; the content list is shared by all of them. */
 function blankDoc(){
   const lib = buildSeedLibrary();
@@ -789,13 +867,27 @@ function decodeTiles(sub, txt){
   }
   return sub;
 }
+function rle(arr){
+  const runs = []; let v = arr[0], n = 0;
+  for(let i=0;i<arr.length;i++){ if(arr[i]===v){ n++; continue; } runs.push(v+"."+n); v=arr[i]; n=1; }
+  runs.push(v+"."+n); return runs.join(";");
+}
+function unrle(arr, txt){
+  let i = 0;
+  for(const run of String(txt||"").split(";")){
+    const [v,n] = run.split(".").map(Number);
+    if(!(n>0)) continue;
+    for(let j=0;j<n && i<arr.length;j++,i++) arr[i] = v;
+  }
+  return arr;
+}
 function serialize(){
   return JSON.stringify({
     format:"ft2-farm-planner", version:2, saved:new Date().toISOString(),
     library:DOC.library, nextKey:DOC.nextKey, presets:DOC.presets,
     activeFarm:DOC.activeFarm, activeSub:DOC.activeSub,
     farms:DOC.farms.map(f=>({ id:f.id, name:f.name,
-      subs:f.subs.map(s=>({ id:s.id, name:s.name, cfg:s.cfg, tiles:encodeTiles(s) })) }))
+      subs:f.subs.map(s=>({ id:s.id, name:s.name, cfg:s.cfg, tiles:encodeTiles(s), fences:rle(s.edge) })) }))
   });
 }
 function deserialize(txt){
@@ -817,6 +909,7 @@ function deserialize(txt){
     subs: (f.subs||[]).map(s => {
       const sub = blankSub(s.name || "Sub-farm", s.cfg || CONFIG);
       if(s.id) sub.id = s.id;
+      if(s.fences) unrle(sub.edge, s.fences);
       return decodeTiles(sub, s.tiles);
     })
   })).filter(f => f.subs.length);
@@ -860,7 +953,8 @@ function clampRect(r){
 }
 
 /* Writes a rectangle. `paint(x,y)` returns [type,item] or null to skip. */
-function writeRect(rect, paint){
+/* A change may touch tiles, fences, or both — one record covers all of it. */
+function collectTiles(rect, paint){
   const r = clampRect(normRect(rect));
   const idx=[], ot=[], oi=[], nt=[], ni=[];
   for(let y=r.y0;y<=r.y1;y++){
@@ -871,18 +965,96 @@ function writeRect(rect, paint){
       idx.push(i); ot.push(S.type[i]); oi.push(S.item[i]); nt.push(p[0]); ni.push(p[1]);
     }
   }
-  if(!idx.length) return 0;
-  const rec = { idx:Int32Array.from(idx), ot:Uint8Array.from(ot), oi:Uint16Array.from(oi),
-                nt:Uint8Array.from(nt), ni:Uint16Array.from(ni) };
+  return idx.length ? { idx:Int32Array.from(idx), ot:Uint8Array.from(ot), oi:Uint16Array.from(oi),
+                        nt:Uint8Array.from(nt), ni:Uint16Array.from(ni) } : null;
+}
+/* pairs: array of [edgeIndex, newValue] */
+function collectEdges(pairs){
+  const idx=[], ov=[], nv=[];
+  for(const [i,v] of pairs){
+    if(i<0 || i>=S.edge.length || S.edge[i]===v) continue;
+    idx.push(i); ov.push(S.edge[i]); nv.push(v);
+  }
+  return idx.length ? { idx:Int32Array.from(idx), ov:Uint8Array.from(ov), nv:Uint8Array.from(nv) } : null;
+}
+function commit(tile, edge){
+  if(!tile && !edge) return 0;
+  const rec = { tile, edge };
   applyRec(rec, false);
   undoStack.push(rec); if(undoStack.length>60) undoStack.shift();
   redoStack.length = 0;
   afterEdit();
-  return idx.length;
+  return (tile?tile.idx.length:0) + (edge?edge.idx.length:0);
 }
+function writeRect(rect, paint){ return commit(collectTiles(rect, paint), null); }
 function applyRec(rec, undo){
-  const t = undo?rec.ot:rec.nt, it = undo?rec.oi:rec.ni;
-  for(let k=0;k<rec.idx.length;k++){ S.type[rec.idx[k]] = t[k]; S.item[rec.idx[k]] = it[k]; }
+  if(rec.tile){
+    const t = undo?rec.tile.ot:rec.tile.nt, it = undo?rec.tile.oi:rec.tile.ni;
+    for(let k=0;k<rec.tile.idx.length;k++){ S.type[rec.tile.idx[k]] = t[k]; S.item[rec.tile.idx[k]] = it[k]; }
+  }
+  if(rec.edge){
+    const v = undo?rec.edge.ov:rec.edge.nv;
+    for(let k=0;k<rec.edge.idx.length;k++) S.edge[rec.edge.idx[k]] = v[k];
+  }
+}
+/* Which single fence line is nearest the cursor. A fence has no side to it —
+   the line between two tiles is one boundary, approached from either. */
+/* Which fence line is nearest the cursor. `force` pins the direction, so a drag
+   that starts on a vertical line keeps drawing vertical lines and doesn't grab
+   the horizontals it passes. */
+function edgeUnder(px, py, force){
+  const [fx, fy] = toTileF(px, py);
+  const nx = Math.round(fx), ny = Math.round(fy);
+  const vertical = force ? force===EDGE_V : Math.abs(fx-nx) < Math.abs(fy-ny);
+  if(vertical){
+    const x = clamp(nx,0,S.W), y = clamp(Math.floor(fy),0,S.H-1);
+    return { idx:eIdx(x,y), bit:EDGE_V, x, y };
+  }
+  const y = clamp(ny,0,S.H), x = clamp(Math.floor(fx),0,S.W-1);
+  return { idx:eIdx(x,y), bit:EDGE_H, x, y };
+}
+/* Painted live, then recorded as one undo step when the drag ends. */
+function paintEdge(px, py, on, touched, force){
+  const e = edgeUnder(px, py, force);
+  const cur = S.edge[e.idx];
+  const nv = on ? (cur|e.bit) : (cur & ~e.bit);
+  if(nv === cur) return;
+  if(!touched.has(e.idx)) touched.set(e.idx, cur);
+  S.edge[e.idx] = nv;
+}
+function commitPaintedEdges(touched){
+  const idx=[], ov=[], nv=[];
+  for(const [i,o] of touched){ if(S.edge[i]===o) continue; idx.push(i); ov.push(o); nv.push(S.edge[i]); }
+  if(!idx.length) return;
+  undoStack.push({ tile:null, edge:{ idx:Int32Array.from(idx), ov:Uint8Array.from(ov), nv:Uint8Array.from(nv) } });
+  if(undoStack.length>60) undoStack.shift();
+  redoStack.length = 0;
+  afterEdit();
+}
+
+/* Every fence in and around a rectangle — what "remove" should take down. */
+function clearEdgesIn(rect){
+  const r = clampRect(normRect(rect));
+  const m = new Map();
+  const set = (i, bit) => { const cur = m.has(i) ? m.get(i) : S.edge[i]; m.set(i, cur & ~bit); };
+  for(let y=r.y0;y<=r.y1+1;y++) for(let x=r.x0;x<=r.x1;x++)   set(eIdx(x,y), EDGE_H);
+  for(let y=r.y0;y<=r.y1;y++)   for(let x=r.x0;x<=r.x1+1;x++) set(eIdx(x,y), EDGE_V);
+  return [...m.entries()];
+}
+
+/* The four sides of a rectangle, as edge segments. */
+function perimeterEdges(rect, on){
+  const r = clampRect(normRect(rect));
+  /* Corners are touched twice — once by a side, once by an end — so the pending
+     value has to accumulate rather than each write starting from the stored one. */
+  const m = new Map();
+  const set = (i, bit) => {
+    const cur = m.has(i) ? m.get(i) : S.edge[i];
+    m.set(i, on ? (cur|bit) : (cur & ~bit));
+  };
+  for(let x=r.x0;x<=r.x1;x++){ set(eIdx(x, r.y0), EDGE_H); set(eIdx(x, r.y1+1), EDGE_H); }
+  for(let y=r.y0;y<=r.y1;y++){ set(eIdx(r.x0, y), EDGE_V); set(eIdx(r.x1+1, y), EDGE_V); }
+  return [...m.entries()];
 }
 function undo(){ const r=undoStack.pop(); if(!r) return; applyRec(r,true); redoStack.push(r); afterEdit(); }
 function redo(){ const r=redoStack.pop(); if(!r) return; applyRec(r,false); undoStack.push(r); afterEdit(); }
@@ -918,7 +1090,7 @@ function makeLockPattern(){
   lockPattern = ctx.createPattern(c,"repeat");
 }
 function resize(){
-  const r = $("#stage").getBoundingClientRect();
+  const r = $("#canvaswrap").getBoundingClientRect();
   dpr = window.devicePixelRatio || 1;
   cssW = r.width; cssH = r.height;
   cv.width = Math.round(cssW*dpr); cv.height = Math.round(cssH*dpr);
@@ -1061,6 +1233,24 @@ function draw(){
     ctx.stroke();
   }
 
+  // ---- fences, drawn on the lines between tiles
+  if($("#optFences").checked && s>=1.5){
+    ctx.strokeStyle = FENCE_COLOR;
+    ctx.lineWidth = Math.max(1.25, Math.min(4, s*0.14));
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    for(let y=y0;y<=Math.min(S.H,y1+1);y++){
+      const row = y*(S.W+1), py = Math.floor(sy(y))+.5;
+      for(let x=x0;x<=Math.min(S.W,x1+1);x++){
+        const v = S.edge[row+x]; if(!v) continue;
+        const px = Math.floor(sx(x))+.5;
+        if(v & EDGE_H && x<S.W){ ctx.moveTo(px, py); ctx.lineTo(Math.floor(sx(x+1))+.5, py); }
+        if(v & EDGE_V && y<S.H){ ctx.moveTo(px, py); ctx.lineTo(px, Math.floor(sy(y+1))+.5); }
+      }
+    }
+    ctx.stroke();
+  }
+
   // ---- selection, drag preview, stamp preview, hover
   if(sel) strokeRect(sel, "rgba(255,255,255,.9)", true);
   if(drag && drag.mode==="rect"){
@@ -1070,8 +1260,36 @@ function draw(){
       ctx.fillRect(sx(r.x0), sy(r.y0), (r.x1-r.x0+1)*s, (r.y1-r.y0+1)*s);
       ctx.globalAlpha = 1;
     }
+    if(drag.tool==="fence"){
+      ctx.save();
+      if(fenceOn === drag.alt){   // removing: show the whole area being cleared
+        ctx.globalAlpha = .18; ctx.fillStyle = "#e0654a";
+        ctx.fillRect(sx(r.x0), sy(r.y0), (r.x1-r.x0+1)*s, (r.y1-r.y0+1)*s);
+        ctx.globalAlpha = 1;
+      }
+      ctx.strokeStyle = (fenceOn !== drag.alt) ? FENCE_COLOR : "#e0654a";
+      ctx.lineWidth = Math.max(2, Math.min(5, s*0.16));
+      ctx.strokeRect(Math.floor(sx(r.x0))+.5, Math.floor(sy(r.y0))+.5,
+                     (r.x1-r.x0+1)*s, (r.y1-r.y0+1)*s);
+      ctx.restore();
+    }
     strokeRect(r, "#f0a933", true);
     badge(r);
+  }
+  if(tool==="fence" && fenceMode==="single" && hover && !drag){
+    const e = edgeUnder(lastPx, lastPy);
+    ctx.save();
+    ctx.strokeStyle = fenceOn ? FENCE_COLOR : "#e0654a";
+    ctx.lineWidth = Math.max(2.5, Math.min(6, s*0.2));
+    ctx.lineCap = "round";
+    ctx.globalAlpha = .85;
+    ctx.beginPath();
+    const ex = Math.floor(sx(e.x))+.5, ey = Math.floor(sy(e.y))+.5;
+    ctx.moveTo(ex, ey);
+    if(e.bit===EDGE_H) ctx.lineTo(Math.floor(sx(e.x+1))+.5, ey);
+    else               ctx.lineTo(ex, Math.floor(sy(e.y+1))+.5);
+    ctx.stroke();
+    ctx.restore();
   }
   if(tool==="stamp" && clip && hover){
     ctx.globalAlpha = .82;
@@ -1163,7 +1381,7 @@ function drawRulers(x0,x1,y0,y1){
    7. POINTER INPUT
    ========================================================================== */
 const pointers = new Map();
-let pinch = null;
+let pinch = null, lastPx = 0, lastPy = 0;
 
 cv.addEventListener("contextmenu", e => e.preventDefault());
 cv.addEventListener("pointerdown", () => {
@@ -1183,9 +1401,15 @@ cv.addEventListener("pointerdown", e => {
   const [tx,ty] = toTile(e.offsetX, e.offsetY);
   if(tool==="pick"){ pickAt(tx,ty); return; }
   if(tool==="stamp"){ stampAt(tx,ty); return; }
-  if(e.altKey){ fillPlotAt(tx,ty); return; }
+  if(tool==="fence" && fenceMode==="single"){
+    const first = edgeUnder(e.offsetX, e.offsetY);
+    drag = { mode:"edge", on:(fenceOn !== e.altKey), touched:new Map(), axis:first.bit };
+    paintEdge(e.offsetX, e.offsetY, drag.on, drag.touched, drag.axis);
+    draw(); return;
+  }
+  if(e.altKey && tool!=="fence"){ fillPlotAt(tx,ty); return; }
   if(tool==="paint" && fixOn()){ writeRect(fixedRectAt(tx,ty), brushPaint()); return; }
-  drag = { mode:"rect", tool, tx0:tx, ty0:ty, tx1:tx, ty1:ty };
+  drag = { mode:"rect", tool, alt:e.altKey, tx0:tx, ty0:ty, tx1:tx, ty1:ty };
   draw();
 });
 cv.addEventListener("pointermove", e => {
@@ -1198,6 +1422,7 @@ cv.addEventListener("pointermove", e => {
   }
   hover = toTile(e.offsetX, e.offsetY);
   if(hover[0]>=0 && hover[1]>=0 && hover[0]<S.W && hover[1]<S.H) lastTile = hover;
+  showTip(e.offsetX, e.offsetY);
   if(drag && drag.mode==="pan"){
     view.x -= (e.offsetX-drag.px)/view.s; view.y -= (e.offsetY-drag.py)/view.s;
     drag.px = e.offsetX; drag.py = e.offsetY; clampView(); draw(); return;
@@ -1206,15 +1431,23 @@ cv.addEventListener("pointermove", e => {
     const [tx,ty] = toTile(e.offsetX, e.offsetY);
     drag.tx1 = clamp(tx,0,S.W-1); drag.ty1 = clamp(ty,0,S.H-1);
   }
+  if(drag && drag.mode==="edge") paintEdge(e.offsetX, e.offsetY, drag.on, drag.touched, drag.axis);
+  lastPx = e.offsetX; lastPy = e.offsetY;
   draw(); updateStatus();
 });
 function endPointer(e){
   pointers.delete(e.pointerId);
   if(pointers.size<2) pinch = null;
   if(!drag) return;
+  if(drag.mode==="edge"){
+    commitPaintedEdges(drag.touched);
+    drag = null; draw(); updateStatus(); return;
+  }
   if(drag.mode==="rect"){
     const r = clampRect(snapRect(normRect({x0:drag.tx0,y0:drag.ty0,x1:drag.tx1,y1:drag.ty1})));
     if(drag.tool==="paint") writeRect(r, brushPaint());
+    else if(drag.tool==="fence")
+      commit(null, collectEdges((fenceOn !== drag.alt) ? perimeterEdges(r, true) : clearEdgesIn(r)));
     else { sel = r; }
   }
   drag = null; cv.className = tool==="pan" ? "panready" : (tool==="pick" ? "picking" : "");
@@ -1222,7 +1455,22 @@ function endPointer(e){
 }
 cv.addEventListener("pointerup", endPointer);
 cv.addEventListener("pointercancel", endPointer);
-cv.addEventListener("pointerleave", () => { hover=null; draw(); updateStatus(); });
+cv.addEventListener("pointerleave", () => { hover=null; hideTip(); draw(); updateStatus(); });
+
+/* Most fields only have room for a three-letter code, so hovering spells it out. */
+function showTip(px, py){
+  const el = $("#tip");
+  if(drag || !hover || hover[0]<0 || hover[1]<0 || hover[0]>=S.W || hover[1]>=S.H) return hideTip();
+  const i = hover[1]*S.W + hover[0];
+  const it = S.item[i] && typeOf(S.type[i]).plantable ? LIB.get(S.item[i]) : null;
+  if(!it) return hideTip();
+  el.hidden = false;
+  el.innerHTML = `${esc(it.name)} <i>${esc(it.cat.toLowerCase())} · ${esc(it.code)}</i>`;
+  const w = el.offsetWidth || 120, hgt = el.offsetHeight || 24;
+  el.style.left = Math.min(px + 14, cssW - w - 6) + "px";
+  el.style.top  = Math.max(4, py - hgt - 10) + "px";
+}
+function hideTip(){ const el = $("#tip"); if(el) el.hidden = true; }
 cv.addEventListener("wheel", e => {
   e.preventDefault();
   zoomAt(e.offsetX, e.offsetY, e.deltaY<0 ? 1.16 : 1/1.16);
@@ -1236,10 +1484,17 @@ function pickAt(tx,ty){
 }
 function stampAt(tx,ty){
   if(!clip) return;
-  writeRect({x0:tx,y0:ty,x1:tx+clip.w-1,y1:ty+clip.h-1}, (x,y)=>{
+  const tiles = collectTiles({x0:tx,y0:ty,x1:tx+clip.w-1,y1:ty+clip.h-1}, (x,y)=>{
     const i = (y-ty)*clip.w + (x-tx);
     return [clip.type[i], clip.item[i]];
   });
+  const pairs = [];
+  if(clip.edge) for(let y=0;y<=clip.h;y++) for(let x=0;x<=clip.w;x++){
+    const gx = tx+x, gy = ty+y;
+    if(gx<0||gy<0||gx>S.W||gy>S.H) continue;
+    pairs.push([eIdx(gx,gy), clip.edge[y*(clip.w+1)+x]]);
+  }
+  commit(tiles, collectEdges(pairs));
 }
 function fillPlotAt(tx,ty){
   const {plotW:pw, plotH:ph} = S.cfg;
@@ -1264,6 +1519,7 @@ addEventListener("keydown", e => {
   if(e.ctrlKey||e.metaKey||e.altKey) return;
   if(k==="escape"){ sel=null; if(tool==="stamp") setTool("paint"); draw(); updateStatus(); return; }
   if(k==="f"){ fitView(); return; }
+  if(k==="r"){ rotateFixed(); return; }
   if(k==="delete"||k==="backspace"){ if(sel) writeRect(sel, ()=>[0,0]); return; }
   if(k==="enter"){ if(sel) writeRect(sel, brushPaint()); return; }
   if(k in KEYMAP){
@@ -1283,6 +1539,7 @@ const TOOLS = [
   { id:"paint",  name:"Paint rectangle", key:"B" },
   { id:"select", name:"Select area",     key:"M" },
   { id:"stamp",  name:"Paste copy",      key:"V" },
+  { id:"fence",  name:"Fence a rectangle", key:"E" },
   { id:"pick",   name:"Pick from farm",  key:"I" },
   { id:"pan",    name:"Pan",             key:"H" }
 ];
@@ -1292,26 +1549,60 @@ function renderTools(){
        <span>${t.name}</span><kbd>${t.key}</kbd></button>`).join("");
   $$("#tools .tool").forEach(b => b.onclick = () => setTool(b.dataset.tool));
 }
+function renderToolOpts(){
+  const map = { paint:"optsPaint", select:"optsSelect", fence:"optsFence", stamp:"optsStamp", pick:"optsPick" };
+  $$(".toolopts").forEach(el => el.classList.toggle("on", el.id === map[tool]));
+  const n = $("#clipNote");
+  if(n) n.textContent = clip ? `Holding a ${clip.w} × ${clip.h} block. Click the map to drop a copy; Esc when you're done.`
+                             : "Nothing copied yet. Select an area and press Copy.";
+}
 function setTool(id){
   if(id==="stamp" && !clip){ flash("Copy an area first — select one, then Copy."); return; }
-  tool = id; renderTools();
+  tool = id; renderTools(); renderToolOpts();
   cv.className = id==="pan" ? "panready" : (id==="pick" ? "picking" : "");
   updateStatus(); draw();
 }
 function renderTypes(){
-  $("#types").innerHTML = TILE_TYPES.map(t =>
-    `<button class="tool ${brush.type===t.id&&(!typeOf(t.id).plantable||!brush.item)?"on":""}" data-type="${t.id}">
-       <span class="sw" style="background:${t.color}"></span><span>${t.name}</span><kbd>${t.key}</kbd></button>`).join("");
-  $$("#types .tool").forEach(b => b.onclick = () => setBrush(+b.dataset.type, 0));
+  const t = typeOf(brush.type);
+  $("#typeSw").style.background = t.color;
+  $("#typeLbl").textContent = t.name;
+  $("#typeMenu").innerHTML = TILE_TYPES.map(x =>
+    `<button class="pickrow ${x.id===brush.type?"on":""}" data-t="${x.id}">
+       <span class="sw" style="background:${x.color}"></span><span>${x.name}</span>${
+       x.footprint ? `<i>${x.footprint[0]}×${x.footprint[1]}</i>` : ""}</button>`).join("");
+  $$("#typeMenu .pickrow").forEach(b => b.onclick = () => {
+    $("#typeMenu").hidden = true;
+    setBrush(+b.dataset.t, 0);
+  });
 }
+$("#typeBtn").onclick = () => { const m = $("#typeMenu"); m.hidden = !m.hidden; };
+/* Close on a click anywhere else — but let that click through, so the first tap
+   on the map after choosing a ground type still paints. */
+document.addEventListener("pointerdown", e => {
+  const m = $("#typeMenu");
+  if(m && !m.hidden && !$("#typePick").contains(e.target)) m.hidden = true;
+}, true);
+$("#clearPlant").onclick = () => setBrush(brush.type, 0);
+let autoFix = false;   // did we turn the exact-rectangle tool on for a footprint?
 function setBrush(type, item){
   brush.type = type;
   brush.item = typeOf(type).plantable ? (item||0) : 0;
+  const fp = typeOf(type).footprint;
+  if(fp){
+    if(!autoFix || +$("#fixW").value * +$("#fixH").value !== fp[0]*fp[1]){
+      $("#fixW").value = fp[0]; $("#fixH").value = fp[1];
+    }
+    $("#fixOn").checked = true; autoFix = true;
+    if(tool!=="paint"){ tool = "paint"; renderTools(); }
+  }else if(autoFix){
+    $("#fixOn").checked = false; autoFix = false;
+  }
   const it = brush.item ? LIB.get(brush.item) : null;
   $("#brushSw").style.background = brushColor();
   $("#brushName").textContent = it ? it.name : typeOf(type).name;
-  $("#brushSub").textContent = it ? `${it.cat.toLowerCase()} · on ${typeOf(type).name.toLowerCase()}` : "bare tile type";
-  renderTypes(); renderLibrary(); draw();
+  $("#brushSub").textContent = it ? it.cat.toLowerCase() : "";
+  $("#plantBox").hidden = !it;
+  renderTypes(); renderLibrary(); renderToolOpts(); draw();
 }
 function copySel(){
   if(!sel){ flash("Select an area first (M), then Copy."); return; }
@@ -1321,7 +1612,10 @@ function copySel(){
     const i = (sel.y0+y)*S.W + sel.x0+x;
     type[y*w+x] = S.type[i]; item[y*w+x] = S.item[i];
   }
-  clip = { w, h, type, item };
+  const edge = new Uint8Array((w+1)*(h+1));
+  for(let y=0;y<=h;y++) for(let x=0;x<=w;x++)
+    edge[y*(w+1)+x] = S.edge[eIdx(sel.x0+x, sel.y0+y)];
+  clip = { w, h, type, item, edge };
   setTool("stamp");
   flash(`Copied ${w} × ${h} — click to paste it. Esc when you're done.`);
   updateStatus();
@@ -1337,7 +1631,12 @@ $("#fillPlot").onclick = () => {
   flash(`Filled plot ${colName(Math.floor(t[0]/S.cfg.plotW))}${Math.floor(t[1]/S.cfg.plotH)+1}.`);
 };
 $("#selPaste").onclick = () => clip ? setTool("stamp") : flash("Select an area and Copy it first.");
-$("#fixSwap").onclick = () => { const w = $("#fixW").value; $("#fixW").value = $("#fixH").value; $("#fixH").value = w; draw(); };
+function rotateFixed(){
+  const w = $("#fixW").value; $("#fixW").value = $("#fixH").value; $("#fixH").value = w;
+  setBrush(brush.type, brush.item);
+  flash(`Now placing ${fixW()} × ${fixH()}.`);
+}
+$("#fixSwap").onclick = rotateFixed;
 ["fixOn","fixW","fixH"].forEach(id => { $("#"+id).oninput = draw; $("#"+id).onchange = draw; });
 function renderPresets(){
   const el = $("#fixPresets");
@@ -1360,7 +1659,12 @@ function renderPresets(){
     flash(`Saved ${w}×${hh} as a preset.`);
   });
 }
-["optGrid","optPlots","optLabels"].forEach(id => $("#"+id).onchange = draw);
+["optGrid","optPlots","optLabels","optFences"].forEach(id => $("#"+id).onchange = draw);
+let fenceOn = true, fenceMode = "rect";
+$("#fenceAdd").onclick = () => { fenceOn = true;  $("#fenceAdd").classList.add("on"); $("#fenceDel").classList.remove("on"); setTool("fence"); };
+$("#fenceDel").onclick = () => { fenceOn = false; $("#fenceDel").classList.add("on"); $("#fenceAdd").classList.remove("on"); setTool("fence"); };
+$("#fenceRect").onclick = () => { fenceMode = "rect";   $("#fenceRect").classList.add("on"); $("#fenceOne").classList.remove("on"); setTool("fence"); };
+$("#fenceOne").onclick  = () => { fenceMode = "single"; $("#fenceOne").classList.add("on"); $("#fenceRect").classList.remove("on"); setTool("fence"); };
 
 /* ==========================================================================
    10. CONTENTS (library) PANEL
@@ -1395,7 +1699,7 @@ function renderLibrary(){
   $("#liblist").innerHTML = rows.map(it =>
     `<div class="item ${brush.item===it.key?"on":""}" data-key="${it.key}">
        <span class="sw" style="background:${it.color}"></span>
-       <span class="nm">${esc(it.name)}</span>
+       <span class="nm" title="${esc(it.name)}">${esc(it.name)}</span>
        <span class="ct">${it.cat.slice(0,2).toUpperCase()}</span>
        <button class="ed" data-edit="${it.key}" title="Edit">✎</button>
      </div>`).join("");
@@ -1558,6 +1862,11 @@ $("#resetLib").onclick = () => {
 /* ==========================================================================
    11. REPORT
    ========================================================================== */
+function fenceCount(){
+  let n = 0;
+  for(let i=0;i<S.edge.length;i++){ const v = S.edge[i]; if(v&EDGE_H) n++; if(v&EDGE_V) n++; }
+  return n;
+}
 function renderReport(){
   const total = S.W*S.H;
   const byType = new Array(TILE_TYPES.length).fill(0);
@@ -1589,7 +1898,8 @@ function renderReport(){
     <div class="kv"><span>Plots in use</span><b>${usedPlots} / ${S.cfg.plotsX*S.cfg.plotsY}</b></div>
     <div class="kv"><span>Plots locked</span><b>${lockedPlots}</b></div>
     <div class="kv"><span>Plowed / water, empty</span><b>${(plantableTiles-plantedTiles).toLocaleString()}</b></div>
-    <div class="kv"><span>Different things grown</span><b>${byItem.size}</b></div>`;
+    <div class="kv"><span>Different things grown</span><b>${byItem.size}</b></div>
+    <div class="kv"><span>Fence segments</span><b>${fenceCount().toLocaleString()}</b></div>`;
 
   $("#repTypes").innerHTML = TILE_TYPES.map(t => {
     const n = byType[t.id]||0, pc = n/total*100;
@@ -1757,19 +2067,24 @@ function askResize(cfg, nW, nH){
 function applyResize(cfg, nW, nH){
   const { offX, offY, srcX, srcY } = resizePlan(cfg, resizeAnchor[0], resizeAnchor[1]);
   const type = new Uint8Array(nW*nH), item = new Uint16Array(nW*nH);
+  const edge = new Uint8Array((nW+1)*(nH+1));
   const copyW = Math.min(S.W-srcX, nW-offX), copyH = Math.min(S.H-srcY, nH-offY);
   for(let y=0;y<copyH;y++) for(let x=0;x<copyW;x++){
     const d = (y+offY)*nW + (x+offX), o = (y+srcY)*S.W + (x+srcX);
     type[d] = S.type[o]; item[d] = S.item[o];
   }
-  S.cfg = cfg; S.W = nW; S.H = nH; S.type = type; S.item = item;
+  for(let y=0;y<=copyH;y++) for(let x=0;x<=copyW;x++)
+    edge[(y+offY)*(nW+1) + (x+offX)] = S.edge[(y+srcY)*(S.W+1) + (x+srcX)];
+  S.cfg = cfg; S.W = nW; S.H = nH; S.type = type; S.item = item; S.edge = edge;
   undoStack.length = redoStack.length = 0; sel = null;
   afterEdit(); refreshFarmUI(); fitView();
   flash(`${S.name} is now ${cfg.plotsX}×${cfg.plotsY} plots — ${nW} × ${nH} tiles.`);
 }
 $("#wipeBtn").onclick = () => {
-  if(!confirm(`Set every tile in "${S.name}" back to grass? Other sub-farms and your content list are untouched.`)) return;
-  writeRect({x0:0,y0:0,x1:S.W-1,y1:S.H-1}, ()=>[0,0]);
+  if(!confirm(`Set every tile in "${S.name}" back to grass and take down its fences? Other sub-farms and your content list are untouched.`)) return;
+  const pairs = [];
+  for(let i=0;i<S.edge.length;i++) if(S.edge[i]) pairs.push([i,0]);
+  commit(collectTiles({x0:0,y0:0,x1:S.W-1,y1:S.H-1}, ()=>[0,0]), collectEdges(pairs));
 };
 function renderStorageNote(){
   const el = $("#storageNote"); if(!el) return;
@@ -1907,6 +2222,9 @@ function defaultHint(){
   return { paint:"drag to paint a rectangle · alt-click fills a plot · right-drag pans",
            select:"drag to select · then Fill, Clear or Copy",
            stamp:"click to paste the copied area · esc to stop",
+           fence: fenceMode==="single"
+                    ? "click or drag along the lines · alt does the opposite"
+                    : "drag a rectangle to fence it · alt-drag removes",
            pick:"click a tile to copy what's on it",
            pan:"drag to move around · scroll to zoom" }[tool] || "";
 }
@@ -1942,10 +2260,10 @@ $("#helpBtn").onclick = () => openModal("Shortcuts", `
     <kbd>B</kbd><span>Paint rectangle</span>
     <kbd>M</kbd><span>Select area</span>
     <kbd>V</kbd><span>Paste what you copied</span>
+    <kbd>E</kbd><span>Fence around a rectangle</span>
     <kbd>I</kbd><span>Pick up what's on a tile</span>
     <kbd>H</kbd> / <span>hold <b>space</b> — pan</span>
-    <kbd>G P R W</kbd><span>Grass, plowed, road, water</span>
-    <kbd>1</kbd>–<kbd>6</kbd><span>Tile types in order</span>
+    <kbd>R</kbd><span>Rotate the exact rectangle</span>
     <kbd>Ctrl</kbd>+<kbd>C</kbd><span>Copy the selection</span>
     <kbd>Ctrl</kbd>+<kbd>V</kbd><span>Switch to stamping</span>
     <kbd>Enter</kbd><span>Fill the selection with the current brush</span>
@@ -1954,6 +2272,8 @@ $("#helpBtn").onclick = () => openModal("Shortcuts", `
     <kbd>F</kbd><span>Fit the whole farm on screen</span>
     <kbd>Esc</kbd><span>Drop the selection</span>
   </div>
+  <p class="note"><b>Fences</b> run along the lines between tiles rather than sitting on them, and a line is one boundary however you approach it. Rectangle mode fences all four sides at once; one-at-a-time draws single lines and drags along a run. Alt does the opposite of whichever mode you're in. Fences travel with copy and paste.</p>
+  <p class="note"><b>Ground type</b> is the dropdown above the map, next to whatever you're currently painting with. Fast travel and fuel tanks have a set footprint, so picking one switches on the exact rectangle at its size — press <b>R</b> to rotate a fuel tank between 2×1 and 1×2.</p>
   <p class="note"><b>Copy and paste:</b> Select an area (M), press Copy, then click wherever you want it. It keeps the ground type and whatever's planted.</p>
   <p class="note"><b>Fixed size:</b> tick <i>Place an exact rectangle</i>, type the size, and every click drops exactly that block. The cursor is its top-left corner.</p>
   <p class="note">Mouse: scroll to zoom, right-drag or middle-drag to pan, alt-click to fill a whole plot.
@@ -1982,7 +2302,7 @@ async function boot(){
   if(!Array.isArray(DOC.presets)) DOC.presets = DEFAULT_PRESETS.map(p=>p.slice());
   S = curSub();
   reindexLibrary();
-  renderTools(); renderTypes(); setBrush(1, 0);
+  renderTools(); renderTypes(); setBrush(1, 0); renderToolOpts();
   refreshFarmUI(); renderCats(); renderLibrary(); renderReport(); renderSlots(); renderPresets();
   renderSeedNotice(); renderResetNote();
   $("#undoBtn").disabled = $("#redoBtn").disabled = true;
@@ -1990,7 +2310,7 @@ async function boot(){
   setSaveState(storageMode==="none" ? "no autosave here — use Export"
              : (saved ? "loaded your last farm" : "new farm"), storageMode==="none");
   if(storageMode==="none") flash("Saving is off in this preview — use Export to keep your work.");
-  new ResizeObserver(resize).observe($("#stage"));
+  new ResizeObserver(resize).observe($("#canvaswrap"));
   resize(); fitView(); updateStatus();
 }
 addEventListener("beforeunload", e => { if(dirty){ e.preventDefault(); e.returnValue = ""; } });
