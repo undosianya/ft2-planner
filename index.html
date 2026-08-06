@@ -255,13 +255,20 @@ aside{
 #seedNotice b{color:var(--amber)}
 #seedNotice .row{margin-top:7px}
 #libfilters{padding:9px 10px;border-bottom:1px solid var(--line);flex:none;display:flex;flex-direction:column;gap:7px}
-#cats{display:flex;flex-wrap:wrap;gap:3px}
-#cats button{
+#cats,#seasonFilter{display:flex;flex-wrap:wrap;gap:3px}
+#cats button,#seasonFilter button{
   background:var(--panel2);border:1px solid var(--line);border-radius:99px;
   padding:2px 9px;cursor:pointer;font-size:11px;color:var(--muted);
 }
-#cats button:hover{color:var(--text)}
-#cats button.on{background:var(--panel3);border-color:var(--line2);color:var(--text)}
+#cats button:hover,#seasonFilter button:hover{color:var(--text)}
+#cats button.on,#seasonFilter button.on{background:var(--panel3);border-color:var(--line2);color:var(--text)}
+#seasonFilter button{font-size:13px;line-height:1;padding:3px 7px}
+#seasonFilter button.only{font-size:10px;color:var(--muted);margin-left:2px}
+#seasonFilter button.only.on{background:var(--amber);border-color:var(--amber);color:#1a1305}
+#libfilters .row select.field{flex:1;width:auto;min-width:0}
+.item .cy{font:10px/1 var(--mono);color:var(--muted)}
+.item .ssn{display:flex;gap:1px;font-size:10px;line-height:1}
+.item .ssn .off{opacity:.22;filter:grayscale(1)}
 #liblist{overflow-y:auto;flex:1;min-height:0}
 .item{
   display:flex;align-items:center;gap:8px;padding:4px 10px;cursor:pointer;
@@ -500,6 +507,11 @@ aside{
       <div id="libfilters">
         <input class="field" id="libSearch" placeholder="Search 343 items…" autocomplete="off">
         <div id="cats"></div>
+        <div id="seasonFilter"></div>
+        <div class="row">
+          <select class="field" id="resFilter"></select>
+          <select class="field" id="sortMode"></select>
+        </div>
         <div class="row">
           <button class="btn sm" id="addItem">Add</button>
           <button class="btn sm" id="bulkItem">Add many</button>
@@ -738,6 +750,406 @@ const SEED_LIBRARY = {
   ],
 };
 
+const SEASONS = ["Spring","Summer","Autumn","Winter"];
+
+/* Per-item metadata not expressible as a plain name string, extracted once
+   from the reference spreadsheet (ref/*.xlsx, not in the repo).
+   - season: subset of SEASONS the item can be planted in; omitted = year-round.
+             Only meaningful for Crops/Herbs/Trees.
+   - resource: one of the ~40 resource-family labels (e.g. "Grains","Citrus","Small Fish").
+   - cycles: integer, Fish only — number of ~17-min grow cycles to harvest. */
+const ITEM_META = {
+  "Lettuce": { resource:"Greens" },
+  "Corn": { resource:"Grains" },
+  "Carrot": { resource:"Vegetables", season:["Spring", "Autumn", "Winter"] },
+  "Beet": { resource:"Vegetables", season:["Summer"] },
+  "Potato": { resource:"Vegetables" },
+  "Zucchini": { resource:"Vegetables", season:["Spring", "Winter"] },
+  "Red Pepper": { resource:"Peppers", season:["Spring", "Summer"] },
+  "Tomato": { resource:"Tomatoes", season:["Spring", "Autumn"] },
+  "Cantaloupe Melon": { resource:"Melons", season:["Spring", "Summer"] },
+  "Spanish Peanut": { resource:"Nuts", season:["Summer", "Winter"] },
+  "Lombardy Cabbage": { resource:"Greens", season:["Spring", "Winter"] },
+  "Melon": { resource:"Melons", season:["Autumn", "Winter"] },
+  "Lucullus Chard": { resource:"Greens", season:["Spring"] },
+  "Lentil": { resource:"Legumes", season:["Spring", "Summer"] },
+  "Wheat": { resource:"Grains", season:["Summer", "Autumn"] },
+  "Lucky Coins": { resource:"Puzzle Pieces", season:["Spring"] },
+  "Junin Corn": { resource:"Grains", season:["Summer", "Autumn"] },
+  "Gladiator Parsnip": { resource:"Vegetables" },
+  "Pumpkin": { resource:"Vegetables", season:["Summer", "Autumn"] },
+  "Creepy Pumpkin": { resource:"Puzzle Pieces", season:["Autumn"] },
+  "Cosmic Purple Carrot": { resource:"Vegetables", season:["Autumn"] },
+  "Carolina Potato": { resource:"Vegetables" },
+  "Romantic Balloons": { resource:"Puzzle Pieces", season:["Winter"] },
+  "Golden Beet": { resource:"Vegetables", season:["Summer"] },
+  "Eggplant": { resource:"Vegetables" },
+  "Honeycomb Tomato": { resource:"Tomatoes", season:["Summer"] },
+  "Watermelon": { resource:"Melons" },
+  "Delightful Gift": { resource:"Puzzle Pieces", season:["Winter"] },
+  "Beefsteak Tomato": { resource:"Tomatoes", season:["Summer", "Winter"] },
+  "Chickpea": { resource:"Legumes", season:["Autumn", "Winter"] },
+  "Vitolette Potato": { resource:"Vegetables", season:["Summer", "Autumn"] },
+  "Gilded Eggs": { resource:"Puzzle Pieces", season:["Spring"] },
+  "Rye": { resource:"Grains", season:["Spring", "Winter"] },
+  "Yellow Pepper": { resource:"Peppers", season:["Spring", "Autumn"] },
+  "Shimmering Sparkler": { resource:"Puzzle Pieces", season:["Summer"] },
+  "Lodge Zucchini": { resource:"Vegetables", season:["Summer", "Autumn"] },
+  "Concord Grape": { resource:"Grapes", season:["Summer"] },
+  "Chinese Eggplant": { resource:"Vegetables", season:["Autumn"] },
+  "Kyoto Carrot": { resource:"Vegetables", season:["Summer"] },
+  "Strawberry Dango": { resource:"Puzzle Pieces", season:["Spring"] },
+  "Green Cabbage": { resource:"Greens", season:["Spring", "Autumn"] },
+  "Acorn Pumpkin": { resource:"Vegetables" },
+  "Cucumber": { resource:"Vegetables", season:["Winter"] },
+  "Cherry Tomato": { resource:"Tomatoes" },
+  "Chocolate Cake Slices": { resource:"Puzzle Pieces", season:["Spring"] },
+  "Barley": { resource:"Grains", season:["Spring", "Summer", "Autumn"] },
+  "Strawberry Red Corn": { resource:"Grains", season:["Spring", "Winter"] },
+  "Thomson Grape": { resource:"Grapes", season:["Spring"] },
+  "Cat Tinkerbells": { resource:"Puzzle Pieces", season:["Spring", "Summer", "Autumn"] },
+  "Canary Melon": { resource:"Melons", season:["Spring", "Summer"] },
+  "Black Beefsteak Tomato": { resource:"Tomatoes", season:["Spring", "Winter"] },
+  "Albino Eggplant": { resource:"Vegetables", season:["Summer", "Winter"] },
+  "Turnip": { resource:"Vegetables", season:["Winter"] },
+  "Strawberry": { resource:"Berries", season:["Spring"] },
+  "Green Pepper": { resource:"Peppers", season:["Autumn", "Winter"] },
+  "Lobbericher Carrot": { resource:"Vegetables", season:["Spring"] },
+  "Cherokee Tomato": { resource:"Tomatoes", season:["Winter"] },
+  "Red Cabbage": { resource:"Greens", season:["Autumn", "Winter"] },
+  "Common Spinach": { resource:"Greens", season:["Spring", "Winter"] },
+  "Yellow Beefsteak Tomato": { resource:"Tomatoes", season:["Summer", "Autumn"] },
+  "Cabernet Grape": { resource:"Grapes", season:["Winter"] },
+  "Yellow Cherry Tomato": { resource:"Tomatoes", season:["Spring", "Summer"] },
+  "Oriole Chard": { resource:"Greens", season:["Autumn"] },
+  "Yellow Onion": { resource:"Legumes", season:["Summer", "Autumn"] },
+  "Baby Boo Pumpkin": { resource:"Vegetables", season:["Spring", "Winter"] },
+  "Crimson Grape": { resource:"Grapes", season:["Autumn"] },
+  "Javelin Parsnip": { resource:"Vegetables" },
+  "Savoy Cabbage": { resource:"Greens", season:["Spring", "Summer"] },
+  "White Garlic": { resource:"Legumes", season:["Summer"] },
+  "Black Cherry Tomato": { resource:"Tomatoes" },
+  "Sweet Onion": { resource:"Legumes", season:["Spring", "Autumn"] },
+  "Pineberry": { resource:"Berries", season:["Winter"] },
+  "Brussels Sprouts": { resource:"Greens" },
+  "Red Spinach": { resource:"Greens", season:["Autumn"] },
+  "Red Garlic": { resource:"Legumes", season:["Spring"] },
+  "Napa Cabbage": { resource:"Greens", season:["Summer", "Autumn"] },
+  "Lunar White Carrot": { resource:"Vegetables", season:["Winter"] },
+  "Black Peppercorn": { resource:"Spices", season:["Spring", "Summer", "Autumn"] },
+  "Bright Lights Chard": { resource:"Greens", season:["Summer"] },
+  "Monterey Celery": { resource:"Greens", season:["Spring"] },
+  "Gold Pineapple": { resource:"Tropicals", season:["Summer"] },
+  "Arborio Rice": { resource:"Grains", season:["Winter"] },
+  "Albion Parsnip": { resource:"Vegetables" },
+  "Black Garlic": { resource:"Legumes", season:["Autumn"] },
+  "Radicchio": { resource:"Greens", season:["Autumn", "Winter"] },
+  "Green Peppercorn": { resource:"Spices", season:["Summer", "Autumn", "Winter"] },
+  "French Bean": { resource:"Legumes", season:["Spring", "Winter"] },
+  "Rhubarb Chard": { resource:"Greens", season:["Winter"] },
+  "Golden Pascal Celery": { resource:"Greens" },
+  "Shallot": { resource:"Legumes", season:["Autumn"] },
+  "Mauritius Pineapple": { resource:"Tropicals", season:["Autumn"] },
+  "Purple Garlic": { resource:"Legumes", season:["Winter"] },
+  "Soy Bean": { resource:"Legumes", season:["Spring", "Summer"] },
+  "Jersey Asparagus": { resource:"Vegetables" },
+  "Pink Peppercorn": { resource:"Spices", season:["Spring", "Summer", "Winter"] },
+  "Basmati Rice": { resource:"Grains", season:["Autumn", "Winter"] },
+  "Hyacinth Bean": { resource:"Legumes", season:["Summer", "Autumn"] },
+  "Red Pineapple": { resource:"Tropicals", season:["Spring"] },
+  "White Peppercorn": { resource:"Spices", season:["Spring", "Autumn", "Winter"] },
+  "Purple Sweet Asparagus": { resource:"Vegetables", season:["Spring"] },
+  "White Onion": { resource:"Legumes", season:["Autumn", "Winter"] },
+  "Chinese Pink Celery": { resource:"Greens", season:["Spring", "Autumn"] },
+  "Black Japonica Rice": { resource:"Grains", season:["Summer", "Winter"] },
+  "Virginia Peanut": { resource:"Nuts", season:["Summer", "Autumn", "Winter"] },
+  "Broad Bean": { resource:"Legumes", season:["Autumn", "Winter"] },
+  "Mary Washington Asparagus": { resource:"Vegetables", season:["Summer"] },
+  "Red Onion": { resource:"Legumes" },
+  "Red Giant Celery": { resource:"Greens", season:["Spring", "Autumn", "Winter"] },
+  "Red Aromatic Rice": { resource:"Grains", season:["Spring", "Winter"] },
+  "Roman Chamomile": { resource:"Remedies", season:["Spring"] },
+  "Green Tea": { resource:"Remedies", season:["Autumn"] },
+  "Dyer's Chamomile": { resource:"Remedies", season:["Autumn"] },
+  "Black Tea": { resource:"Remedies", season:["Summer"] },
+  "Common Mint": { resource:"Aromatics", season:["Spring", "Autumn"] },
+  "Matcha Tea": { resource:"Remedies", season:["Autumn"] },
+  "Flat Parsley": { resource:"Spices", season:["Spring"] },
+  "Licorice": { resource:"Remedies", season:["Winter"] },
+  "Chocolate Mint": { resource:"Aromatics", season:["Summer", "Winter"] },
+  "Pu'er Tea": { resource:"Remedies", season:["Spring"] },
+  "Curly Parsley": { resource:"Spices", season:["Spring", "Autumn"] },
+  "Common Thyme": { resource:"Aromatics", season:["Spring", "Summer"] },
+  "Orange Mint": { resource:"Aromatics", season:["Spring", "Summer"] },
+  "Coriander": { resource:"Spices", season:["Spring", "Summer"] },
+  "Pineapple Mint": { resource:"Aromatics", season:["Autumn", "Winter"] },
+  "Italian Basil": { resource:"Aromatics", season:["Autumn", "Winter"] },
+  "French Thyme": { resource:"Aromatics", season:["Summer", "Winter"] },
+  "Lemon Basil": { resource:"Aromatics", season:["Summer", "Winter"] },
+  "Osmin Basil": { resource:"Aromatics", season:["Spring", "Autumn"] },
+  "Apple Tree": { resource:"Apples" },
+  "Lemon Tree": { resource:"Citrus", season:["Spring", "Summer"] },
+  "Pear Tree": { resource:"Fruits", season:["Spring", "Summer", "Autumn"] },
+  "Pine Tree": { resource:"Nuts", season:["Autumn", "Winter"] },
+  "Banana Tree": { resource:"Tropicals", season:["Summer"] },
+  "Peach Tree": { resource:"Fruits", season:["Spring", "Autumn"] },
+  "Orange Tree": { resource:"Citrus", season:["Spring"] },
+  "Chrome Cyber Tree": { resource:"Apples" },
+  "Money Tree": { resource:"Confetti", season:["Spring", "Winter"] },
+  "Royal Gala Apple Tree": { resource:"Apples", season:["Spring", "Winter"] },
+  "Coconut Tree": { resource:"Tropicals", season:["Summer"] },
+  "Black Mulberry": { resource:"Berries", season:["Spring", "Winter"] },
+  "Apricot Tree": { resource:"Fruits", season:["Summer", "Autumn"] },
+  "Fruit Bat Tree": { resource:"Confetti", season:["Autumn", "Winter"] },
+  "Lime Tree": { resource:"Citrus", season:["Spring"] },
+  "Flowering Cherry Tree": { resource:"Poinsettias", season:["Autumn"] },
+  "Reinette Apple Tree": { resource:"Apples", season:["Autumn", "Winter"] },
+  "Red Mulberry": { resource:"Berries", season:["Autumn"] },
+  "Bamboo": { resource:"Greens" },
+  "English Holly": { resource:"Poppies", season:["Winter"] },
+  "Prickly Pear Cactus": { resource:"Fruits", season:["Summer", "Winter"] },
+  "Raspberry": { resource:"Berries", season:["Summer", "Winter"] },
+  "Jade Cyber Tree": { resource:"Apples", season:["Spring"] },
+  "Fargesia Bamboo": { resource:"Greens", season:["Summer", "Winter"] },
+  "White Mulberry": { resource:"Berries", season:["Summer", "Winter"] },
+  "Plum Tree": { resource:"Fruits", season:["Spring", "Autumn", "Winter"] },
+  "Burro Banana Tree": { resource:"Tropicals", season:["Spring", "Summer"] },
+  "Golden Bamboo": { resource:"Greens", season:["Spring", "Autumn"] },
+  "Tangerine Tree": { resource:"Citrus", season:["Autumn", "Winter"] },
+  "Mango": { resource:"Tropicals", season:["Summer"] },
+  "Granny Smith Apple Tree": { resource:"Apples", season:["Spring", "Summer"] },
+  "Haden Mango": { resource:"Tropicals", season:["Winter"] },
+  "Hawaiian Holly": { resource:"Poppies", season:["Winter"] },
+  "Kent Mango": { resource:"Tropicals", season:["Autumn"] },
+  "Walnut Tree": { resource:"Nuts", season:["Summer", "Autumn"] },
+  "Quince Tree": { resource:"Fruits", season:["Spring", "Autumn", "Winter"] },
+  "Mango Alphonso": { resource:"Tropicals", season:["Spring"] },
+  "Yuzu Tree": { resource:"Citrus", season:["Spring", "Winter"] },
+  "Bronze Cyber Tree": { resource:"Apples", season:["Summer"] },
+  "Clove Tree": { resource:"Spices", season:["Summer"] },
+  "Golden Apple Tree": { resource:"Apples" },
+  "Blood Tangerine": { resource:"Citrus", season:["Spring"] },
+  "Black Walnut Tree": { resource:"Nuts", season:["Autumn"] },
+  "Almond Tree": { resource:"Nuts", season:["Autumn", "Winter"] },
+  "Red Dacca Banana Tree": { resource:"Tropicals", season:["Summer", "Autumn"] },
+  "Ceylon Cinnamon Tree": { resource:"Spices", season:["Spring", "Autumn"] },
+  "Blueberry": { resource:"Berries", season:["Summer", "Autumn"] },
+  "Inkberry Holly": { resource:"Poppies", season:["Winter"] },
+  "Wonderful Pomegranate": { resource:"Fruits", season:["Autumn", "Winter"] },
+  "Cassia Cinnamon Tree": { resource:"Spices", season:["Summer", "Winter"] },
+  "Livermore Walnut Tree": { resource:"Nuts", season:["Winter"] },
+  "Pistachio Tree": { resource:"Nuts", season:["Spring", "Summer"] },
+  "Purple Heart Pomegranate": { resource:"Fruits", season:["Spring", "Summer"] },
+  "Blue Java Banana Tree": { resource:"Tropicals", season:["Summer", "Winter"] },
+  "Forastero Cocoa Tree": { resource:"Spices", season:["Summer"] },
+  "Brown Turkey Fig Tree": { resource:"Melons", season:["Spring", "Summer", "Winter"] },
+  "Redcurrant": { resource:"Berries", season:["Autumn", "Winter"] },
+  "Bing Cherry": { resource:"Berries", season:["Spring"] },
+  "Criollo Cocoa Tree": { resource:"Spices", season:["Summer", "Autumn"] },
+  "Haku Botan Pomegranate": { resource:"Fruits", season:["Autumn"] },
+  "Adriatic Fig Tree": { resource:"Melons", season:["Autumn", "Winter"] },
+  "Hass Avocado": { resource:"Tropicals", season:["Summer", "Winter"] },
+  "Trinitario Cocoa Tree": { resource:"Spices", season:["Spring", "Summer"] },
+  "Rainier Cherry": { resource:"Berries", season:["Spring", "Summer"] },
+  "Common Dragonfruit Tree": { resource:"Tropicals", season:["Winter"] },
+  "Gwen Avocado": { resource:"Tropicals", season:["Spring", "Winter"] },
+  "Yellow Dragonfruit Tree": { resource:"Tropicals", season:["Spring"] },
+  "Black Pearl Cherry": { resource:"Berries", season:["Autumn"] },
+  "Pinkerton Avocado": { resource:"Tropicals", season:["Autumn", "Winter"] },
+  "Rose": { resource:"Roses" },
+  "Marbled Poinsettia": { resource:"Confetti" },
+  "Candy Stripe Phlox": { resource:"Confetti" },
+  "Daisy": { resource:"Daisies" },
+  "Ramanas Rose": { resource:"Roses" },
+  "China Pink Tulip": { resource:"Tulips" },
+  "Shasta Daisy": { resource:"Daisies" },
+  "Saffron Crocus": { resource:"Tulips" },
+  "Bizet Carnation": { resource:"Roses" },
+  "Damask Rose": { resource:"Roses" },
+  "Swan River Daisy": { resource:"Daisies" },
+  "Common Venus Flytrap": { resource:"Tulips" },
+  "Orange Princess Tulip": { resource:"Tulips" },
+  "Provence Rose": { resource:"Roses" },
+  "Domingo Carnation": { resource:"Roses" },
+  "Poppy": { resource:"Poppies" },
+  "Cape Daisy": { resource:"Daisies" },
+  "Arabian Mystery Tulip": { resource:"Tulips" },
+  "Edelweiss": { resource:"Daisies" },
+  "Grandiflora Rose": { resource:"Roses" },
+  "Iceland Poppy": { resource:"Poppies" },
+  "White Liberty Carnation": { resource:"Roses" },
+  "Flavus Crocus": { resource:"Tulips" },
+  "Sevilla Tulip": { resource:"Tulips" },
+  "Celestial Morning Glory": { resource:"Tulips" },
+  "Midnight Venus Flytrap": { resource:"Tulips" },
+  "California Poppy": { resource:"Poppies" },
+  "Salamanca Carnation": { resource:"Roses" },
+  "Noah Morning Glory": { resource:"Tulips" },
+  "Blue Diamond Tulips": { resource:"Tulips" },
+  "Arabian Poppy": { resource:"Poppies" },
+  "African Daisy": { resource:"Daisies" },
+  "Silk Morning Glory": { resource:"Tulips" },
+  "Royal Blue Carnation": { resource:"Roses" },
+  "Caldera Red Geranium": { resource:"Poppies" },
+  "Flanders Poppy": { resource:"Poppies" },
+  "Pearly Morning Glory": { resource:"Tulips" },
+  "Velvet Venus Flytrap": { resource:"Tulips" },
+  "Snow Bunting Crocus": { resource:"Tulips" },
+  "Sunforest Sunflower": { resource:"Daisies" },
+  "Cranesbill Geranium": { resource:"Poppies" },
+  "Heavenly Blue Morning Glory": { resource:"Tulips" },
+  "Royal Blue Poinsettia": { resource:"Poinsettias" },
+  "Horizon White Geranium": { resource:"Poppies" },
+  "Crimson Venus Flytrap": { resource:"Tulips" },
+  "Earthwalker Sunflower": { resource:"Daisies" },
+  "Sieberi Crocus": { resource:"Tulips" },
+  "Gatsby Pink Hydrangea": { resource:"Roses" },
+  "Astro Red Poinsettia": { resource:"Poinsettias" },
+  "Orange Monarch Crocus": { resource:"Tulips" },
+  "Italian White Sunflower": { resource:"Daisies" },
+  "Blue Sky Noon Geranium": { resource:"Poppies" },
+  "McDaniel's Cushion Phlox": { resource:"Daisies" },
+  "Nikko Blue Hydrangea": { resource:"Roses" },
+  "Sunrise Geranium": { resource:"Poppies" },
+  "Strawberry Blonde Sunflower": { resource:"Daisies" },
+  "Gold Rush Poinsettia": { resource:"Poinsettias" },
+  "Purple Beauty Phlox": { resource:"Daisies" },
+  "Limelight Hydrangea": { resource:"Roses" },
+  "Suntastic Sunflower": { resource:"Daisies" },
+  "Mars Pink Poinsettia": { resource:"Poinsettias" },
+  "Lauren's Grape Poppy": { resource:"Poppies" },
+  "Mont Blanc Phlox": { resource:"Daisies" },
+  "Magical Hydrangea": { resource:"Roses" },
+  "Polar Bear Poinsettia": { resource:"Poinsettias" },
+  "Red Baron Hydrangea": { resource:"Roses" },
+  "Emerald Blue Phlox": { resource:"Daisies" },
+  "Leghorn Chicken": { resource:"Egg" },
+  "Landrace Pig": { resource:"Mushroom" },
+  "New Hampshire Chicken": { resource:"Egg" },
+  "Hampshire Pig": { resource:"Mushroom" },
+  "Australorp Chicken": { resource:"Egg" },
+  "Holstein Cow": { resource:"Milk" },
+  "Unicorn": { resource:"Confetti" },
+  "Easter Rabbit": { resource:"Confetti" },
+  "Jersey Giant Chicken": { resource:"Egg" },
+  "Rainbow Alpaca": { resource:"Confetti" },
+  "Jersey Cow": { resource:"Milk" },
+  "Large Black Pig": { resource:"Mushroom" },
+  "Pastel Llama": { resource:"Confetti" },
+  "Hampshire Sheep": { resource:"Wool" },
+  "Orpington Chicken": { resource:"Egg" },
+  "Belted Cow": { resource:"Milk" },
+  "Hereford Pig": { resource:"Mushroom" },
+  "Merino Sheep": { resource:"Wool" },
+  "Abacot Ranger Duck": { resource:"Feathers" },
+  "Serama Bantam Chicken": { resource:"Egg" },
+  "Ayrshire Cow": { resource:"Milk" },
+  "Duroc Pig": { resource:"Mushroom" },
+  "Alpine Goat": { resource:"Milk" },
+  "Gotland Sheep": { resource:"Wool" },
+  "Pekin Duck": { resource:"Feathers" },
+  "Girolando Cow": { resource:"Milk" },
+  "Kunekune Pig": { resource:"Mushroom" },
+  "Black Bengal Goat": { resource:"Milk" },
+  "Dutch Rabbit": { resource:"Wool" },
+  "Romanov Sheep": { resource:"Wool" },
+  "Duckling": { resource:"Feathers" },
+  "Bourbon Red Turkey": { resource:"Egg" },
+  "Jacob Sheep": { resource:"Wool" },
+  "Suri Alpaca": { resource:"Wool" },
+  "Magpie Duck": { resource:"Feathers" },
+  "Tyrol Grey Cow": { resource:"Milk" },
+  "Saanen Goat": { resource:"Milk" },
+  "Netherland Dwarf Rabbit": { resource:"Wool" },
+  "Black Welsh Sheep": { resource:"Wool" },
+  "Norfolk Black Turkey": { resource:"Egg" },
+  "Cayuga Duck": { resource:"Feathers" },
+  "American Quarter Horse": { resource:"Horseshoes" },
+  "Australian Brown Goat": { resource:"Milk" },
+  "Alaska Rabbit": { resource:"Wool" },
+  "Muscovy Duck": { resource:"Feathers" },
+  "Nigerian Dwarf Goat": { resource:"Milk" },
+  "Beltsville White Turkey": { resource:"Egg" },
+  "Common Peafowl": { resource:"Feathers" },
+  "Huacaya Alpaca": { resource:"Wool" },
+  "Belgian Fawn Goat": { resource:"Milk" },
+  "Arabian Horse": { resource:"Horseshoes" },
+  "Flemish Giant Rabbit": { resource:"Wool" },
+  "Grand Noir Donkey": { resource:"Horseshoes" },
+  "Wild Turkey": { resource:"Egg" },
+  "Green Peafowl": { resource:"Feathers" },
+  "Harlequin Rabbit": { resource:"Wool" },
+  "Friesian Horse": { resource:"Horseshoes" },
+  "Llama": { resource:"Wool" },
+  "Royal Palm Turkey": { resource:"Egg" },
+  "Miranda Donkey": { resource:"Horseshoes" },
+  "Californian Rabbit": { resource:"Wool" },
+  "White Peafowl": { resource:"Feathers" },
+  "American Paint Horse": { resource:"Horseshoes" },
+  "Ocellated Turkey": { resource:"Egg" },
+  "Appaloosa Horse": { resource:"Horseshoes" },
+  "Opal Peafowl": { resource:"Feathers" },
+  "Andalusian Donkey": { resource:"Horseshoes" },
+  "Holsteiner Horse": { resource:"Horseshoes" },
+  "Miniatura Donkey": { resource:"Horseshoes" },
+  "Provence Donkey": { resource:"Horseshoes" },
+  "Asinara Donkey": { resource:"Horseshoes" },
+  "Clownfish": { resource:"Small Fish", cycles:2 },
+  "Salmon": { resource:"Medium Fish", cycles:6 },
+  "Amber Clownfish": { resource:"Small Fish", cycles:2 },
+  "Blowfish": { resource:"Medium Fish", cycles:7 },
+  "Crimson Salmon": { resource:"Medium Fish", cycles:6 },
+  "Neon Tetra": { resource:"Small Fish", cycles:2 },
+  "Swordfish": { resource:"Big Fish", cycles:12 },
+  "Trout": { resource:"Medium Fish", cycles:8 },
+  "Ebony Clownfish": { resource:"Small Fish", cycles:2 },
+  "Viridian Salmon": { resource:"Medium Fish", cycles:6 },
+  "Surgeonfish": { resource:"Small Fish", cycles:3 },
+  "Cocoa Blowfish": { resource:"Medium Fish", cycles:7 },
+  "Coral Trout": { resource:"Medium Fish", cycles:8 },
+  "Topaz Swordfish": { resource:"Big Fish", cycles:12 },
+  "Ember Tetra": { resource:"Small Fish", cycles:4 },
+  "Platinum Surgeonfish": { resource:"Small Fish", cycles:3 },
+  "Sardine": { resource:"Small Fish", cycles:4 },
+  "Cerulean Blowfish": { resource:"Medium Fish", cycles:7 },
+  "Brass Trout": { resource:"Medium Fish", cycles:8 },
+  "Emerald Swordfish": { resource:"Big Fish", cycles:12 },
+  "Bronze Surgeonfish": { resource:"Small Fish", cycles:3 },
+  "Slinger Seabream": { resource:"Medium Fish", cycles:5 },
+  "Glowlight Tetra": { resource:"Small Fish", cycles:6 },
+  "Pacific Sardinella": { resource:"Small Fish", cycles:3 },
+  "Silver Hake": { resource:"Medium Fish", cycles:24 },
+  "Hottentot Seabream": { resource:"Medium Fish", cycles:7 },
+  "Toothfish": { resource:"Medium Fish", cycles:26 },
+  "Vermillion Snapper": { resource:"Big Fish", cycles:14 },
+  "Emperor Tetra": { resource:"Small Fish", cycles:3 },
+  "White Sardine": { resource:"Small Fish", cycles:2 },
+  "Pacific Hake": { resource:"Medium Fish", cycles:28 },
+  "Ginrin Koi": { resource:"Big Fish", cycles:13 },
+  "Cardinal Tetra": { resource:"Small Fish", cycles:5 },
+  "Black Snapper": { resource:"Big Fish", cycles:15 },
+  "Seventyfour Seabream": { resource:"Medium Fish", cycles:9 },
+  "Utsuri Koi": { resource:"Big Fish", cycles:15 },
+  "Yellowtail Snapper": { resource:"Big Fish", cycles:16 },
+  "Johnson's Anglerfish": { resource:"Medium Fish", cycles:16 },
+  "Shusui Koi": { resource:"Big Fish", cycles:18 },
+  "Murray's Anglerfish": { resource:"Medium Fish", cycles:18 },
+  "Pike Piranha": { resource:"Small Fish", cycles:2 },
+  "Kikokuryu Koi": { resource:"Big Fish", cycles:20 },
+  "Red-Bellied Piranha": { resource:"Small Fish", cycles:3 },
+  "Atlantic Footballfish": { resource:"Medium Fish", cycles:20 },
+  "Tancho Koi": { resource:"Big Fish", cycles:22 },
+  "Leucistic Axolotl": { resource:"Small Fish", cycles:4 },
+  "Black Piranha": { resource:"Small Fish", cycles:3 },
+  "Triplewart Seadevil": { resource:"Medium Fish", cycles:24 },
+  "Wild Axolotl": { resource:"Small Fish", cycles:6 },
+  "San Francisco Piranha": { resource:"Small Fish", cycles:2 },
+  "Melanoid Axolotl": { resource:"Small Fish", cycles:4 },
+  "Copper Axolotl": { resource:"Small Fish", cycles:5 },
+};
+function metaFor(name){ return ITEM_META[name] || {}; }
+
+
 /* ==========================================================================
    2. STATE
    ========================================================================== */
@@ -792,7 +1204,7 @@ function curSub(){
 function buildSeedLibrary(){
   const out = []; let k = 1;
   for(const [cat, names] of Object.entries(SEED_LIBRARY))
-    for(const n of names) out.push({ key:k++, name:n, cat, color:autoColor(cat, n), code:autoCode(n) });
+    for(const n of names) out.push({ key:k++, name:n, cat, color:autoColor(cat, n), code:autoCode(n), ...metaFor(n) });
   return out;
 }
 
@@ -1857,6 +2269,11 @@ $("#fenceOne").onclick  = () => { fenceMode = "single"; $("#fenceOne").classList
    10. CONTENTS (library) PANEL
    ========================================================================== */
 let catFilter = "All";
+let seasonFilter = new Set();   // empty = no restriction; item must match every season in the set
+let seasonOnly   = false;       // when true, item's seasons must equal seasonFilter exactly, not just include it
+let resFilter    = "All";
+let sortMode     = "default";
+const SEASON_ICON = { Spring:"🌸", Summer:"☀️", Autumn:"🍂", Winter:"❄️" };
 function categories(){
   const set = new Set(DOC.library.map(i=>i.cat));
   return ["All", ...[...set].sort()];
@@ -1865,19 +2282,74 @@ function renderCats(){
   $("#cats").innerHTML = categories().map(c =>
     `<button class="${catFilter===c?"on":""}" data-cat="${c}">${c}</button>`).join("");
   $$("#cats button").forEach(b => b.onclick = () => { catFilter=b.dataset.cat; renderCats(); renderLibrary(); });
+  renderSeasonFilter();
+  renderResFilter();
+  renderSortOptions();
+}
+function renderSeasonFilter(){
+  const el = $("#seasonFilter");
+  const seasonless = catFilter==="Flowers" || catFilter==="Animals" || catFilter==="Fish";
+  el.style.display = seasonless ? "none" : "";
+  if(seasonless) return;
+  el.innerHTML = `<button class="${seasonFilter.size===0?"on":""}" data-season="">All</button>` +
+    SEASONS.map(s =>
+      `<button class="${seasonFilter.has(s)?"on":""}" data-season="${s}" title="${s}">${SEASON_ICON[s]}</button>`).join("") +
+    `<button class="only ${seasonOnly?"on":""}" id="seasonOnlyBtn" title="Match exactly the selected seasons — no more, no less">Only</button>`;
+  el.querySelectorAll("button[data-season]").forEach(b => b.onclick = () => {
+    const s = b.dataset.season;
+    if(!s) seasonFilter.clear();
+    else if(seasonFilter.has(s)) seasonFilter.delete(s);
+    else seasonFilter.add(s);
+    renderSeasonFilter(); renderLibrary();
+  });
+  el.querySelector("#seasonOnlyBtn").onclick = () => { seasonOnly = !seasonOnly; renderSeasonFilter(); renderLibrary(); };
+}
+function renderResFilter(){
+  const el = $("#resFilter");
+  const pool = DOC.library.filter(it => catFilter==="All" || it.cat===catFilter);
+  const options = ["All", ...[...new Set(pool.map(it=>it.resource).filter(Boolean))].sort()];
+  if(!options.includes(resFilter)) resFilter = "All";
+  el.innerHTML = options.map(r => `<option ${r===resFilter?"selected":""}>${esc(r)}</option>`).join("");
+  el.onchange = () => { resFilter = el.value; renderLibrary(); };
+}
+function renderSortOptions(){
+  const el = $("#sortMode");
+  const options = [{v:"default",l:"Default order"},{v:"name",l:"Name (A–Z)"}];
+  if(catFilter==="Fish") options.push({v:"cycles",l:"Grow cycles"});
+  if(!options.some(o=>o.v===sortMode)) sortMode = "default";
+  el.innerHTML = options.map(o => `<option value="${o.v}" ${o.v===sortMode?"selected":""}>${o.l}</option>`).join("");
+  el.onchange = () => { sortMode = el.value; renderLibrary(); };
 }
 function usedKeys(){
   const set = new Set();
   for(let i=0;i<S.item.length;i++) if(S.item[i] && typeOf(S.type[i]).plantable) set.add(S.item[i]);
   return set;
 }
+const SEASONED_CATS = new Set(["Crops","Herbs","Trees"]);
+function itemSeasons(it){ return it.season || SEASONS; }   // missing season = year-round (all four)
+function seasonBadge(it){
+  if(!SEASONED_CATS.has(it.cat)) return "";
+  const have = itemSeasons(it);
+  return `<span class="ssn">${SEASONS.map(s =>
+    `<span class="${have.includes(s)?"on":"off"}" title="${s}">${SEASON_ICON[s]}</span>`).join("")}</span>`;
+}
+function matchesSeason(it){
+  if(seasonFilter.size===0) return true;
+  const have = itemSeasons(it);
+  if(seasonOnly) return have.length===seasonFilter.size && [...seasonFilter].every(s=>have.includes(s));
+  return [...seasonFilter].every(s=>have.includes(s));
+}
 function renderLibrary(){
   const q = $("#libSearch").value.trim().toLowerCase();
   const used = $("#onlyUsed").checked ? usedKeys() : null;
   const rows = DOC.library.filter(it =>
       (catFilter==="All" || it.cat===catFilter) &&
+      matchesSeason(it) &&
+      (resFilter==="All" || it.resource===resFilter) &&
       (!q || it.name.toLowerCase().includes(q)) &&
       (!used || used.has(it.key)));
+  if(sortMode==="name")        rows.sort((a,b)=>a.name.localeCompare(b.name));
+  else if(sortMode==="cycles") rows.sort((a,b)=>(a.cycles??Infinity)-(b.cycles??Infinity));
   $("#libSearch").placeholder = `Search ${DOC.library.length} items…`;
   if(!rows.length){
     $("#liblist").innerHTML = `<div class="emptynote">Nothing matches.<br>Use <b>Add</b> to put new content in the list.</div>`;
@@ -1887,6 +2359,8 @@ function renderLibrary(){
     `<div class="item ${brush.item===it.key?"on":""}" data-key="${it.key}">
        <span class="sw" style="background:${it.color}"></span>
        <span class="nm" title="${esc(it.name)}">${esc(it.name)}</span>
+       ${seasonBadge(it)}
+       ${it.cycles!=null ? `<span class="cy">${it.cycles}c</span>` : ""}
        <span class="ct">${it.cat.slice(0,2).toUpperCase()}</span>
        <button class="ed" data-edit="${it.key}" title="Edit">✎</button>
      </div>`).join("");
@@ -1996,7 +2470,7 @@ function renderSeedNotice(){
     const { missing } = libraryDiff();
     for(const m of missing)
       DOC.library.push({ key:DOC.nextKey++, name:m.name, cat:m.cat,
-                         color:autoColor(m.cat, m.name), code:autoCode(m.name) });
+                         color:autoColor(m.cat, m.name), code:autoCode(m.name), ...metaFor(m.name) });
     reindexLibrary(); renderCats(); renderLibrary(); renderSeedNotice(); renderResetNote(); markDirty();
     flash(`Added ${missing.length} item${missing.length>1?"s":""} from the file.`);
   };
