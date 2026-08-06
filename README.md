@@ -26,7 +26,7 @@ around here costs nothing (or well, less time, no money).
 water. The list ships with everything in the game and is editable in the app —
 add new content as it releases without touching the code.
 
-**Editing in bulk.** Drag a rectangle to paint it. Place exact sizes (3×18, 24×24,
+**Editing in bulk.** Drag a rectangle to paint it. Place exact sizes (18x3, 24×24,
 whatever you save as a preset). Copy a finished area and stamp it wherever you
 want it. Alt-click to fill a whole plot. Full undo.
 
