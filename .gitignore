@@ -4,3 +4,6 @@
 
 # Reference folder
 /ref/
+
+# macOS
+.DS_Store

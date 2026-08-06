@@ -157,6 +157,9 @@ aside{
   border:1px solid var(--line);border-radius:3px;padding:2px 4px;
 }
 .tool.on kbd{color:var(--amber);border-color:var(--line2)}
+.tool svg{flex:none;color:var(--muted)}
+.tool:hover svg{color:var(--text)}
+.tool.on svg{color:var(--amber)}
 .sw{width:14px;height:14px;border-radius:2px;flex:none;border:1px solid rgba(0,0,0,.45)}
 .sw.lg{width:18px;height:18px}
 
@@ -376,6 +379,9 @@ aside{
       <div class="grp">
         <h3>Tool</h3>
         <div class="col" id="tools"></div>
+        <label class="check" style="margin-top:9px;padding-top:9px;border-top:1px solid var(--line)">
+          <input type="checkbox" id="optSnap"> Snap drags to plots</label>
+        <p class="note" style="margin:5px 0 0;font-size:11px">Rounds every rectangle out to whole plots.</p>
       </div>
 
       <!-- Only the options belonging to the current tool are shown. -->
@@ -405,7 +411,7 @@ aside{
           <button class="btn sm" id="selCopy">Copy</button>
           <button class="btn sm" id="selPaste">Paste</button>
         </div>
-        <p class="note" style="margin:8px 0 0;font-size:11px">Fill uses whatever's in the ground bar above the map.</p>
+        <p class="note" style="margin:8px 0 0;font-size:11px">Fill uses whatever's in the ground bar above the map — pick a crop while a selection is open and it stays open. Switching to another tool drops it.</p>
       </div>
 
       <div class="grp toolopts" id="optsFence">
@@ -418,7 +424,8 @@ aside{
           <button class="btn sm on" id="fenceRect">Rectangle</button>
           <button class="btn sm" id="fenceOne">Single line</button>
         </div>
-        <p class="note" style="margin:8px 0 0;font-size:11px">Rectangle fences all four sides at once, and removing takes down every fence inside the rectangle too. Single line follows the nearest boundary and keeps to that direction as you drag. Alt does the opposite of the mode you're in.</p>
+        <label class="check" style="margin-top:7px"><input type="checkbox" id="fenceField"> Snap to field</label>
+        <p class="note" style="margin:8px 0 0;font-size:11px">Rectangle fences all four sides at once, and removing takes down every fence inside the rectangle too. Single line sticks to the one boundary you start on and fills in any gaps if you drag quickly. Snapping to the field wraps whatever you click — one crop, one pond, one road — and overrides the plot snap. Alt does the opposite of the mode you're in.</p>
       </div>
 
       <div class="grp toolopts" id="optsStamp">
@@ -438,7 +445,6 @@ aside{
           <label class="check"><input type="checkbox" id="optPlots" checked> Plot borders</label>
           <label class="check"><input type="checkbox" id="optFences" checked> Fences</label>
           <label class="check"><input type="checkbox" id="optLabels" checked> Names when zoomed in</label>
-          <label class="check"><input type="checkbox" id="optSnap"> Snap edits to plots</label>
         </div>
       </div>
     </div>
@@ -610,6 +616,7 @@ const FENCE_COLOR = "#e0c088";
 /* Hue band per category — used only when auto-picking a colour for a new item. */
 const CAT_HUE = {
   Crops:   [ 70, 150],
+  Herbs:   [ 50,  69],
   Trees:   [152, 196],
   Flowers: [282, 352],
   Animals: [ 12,  50],
@@ -625,91 +632,103 @@ const KEYMAP = {
 const SEED_LIBRARY = {
   Crops: [
     "Lettuce", "Corn", "Carrot", "Beet", "Potato", "Zucchini", "Red Pepper", "Tomato",
-      "Cantaloupe Melon", "Spanish Peanut", "Lombardy Cabbage", "Melon", "Lucullus Chard",
-      "Lentil", "Wheat", "Lucky Coins", "Junin Corn", "Gladiator Parsnip", "Pumpkin",
-      "Creepy Pumpkin", "Cosmic Purple Carrot", "Carolina Potato", "Romantic Balloons",
-      "Golden Beet", "Eggplant", "Honeycomb Tomato", "Watermelon", "Delightful Gift",
-      "Beefsteak Tomato", "Chickpea", "Vitolette Potato", "Gilded Eggs", "Rye", "Yellow Pepper",
-      "Shimmering Sparkler", "Lodge Zucchini", "Concord Grape", "Chinese Eggplant",
-      "Kyoto Carrot", "Green Cabbage", "Acorn Pumpkin", "Cucumber", "Cherry Tomato", "Barley",
-      "Strawberry Red Corn", "Thomson Grape", "Cat Tinkerbells", "Canary Melon",
-      "Black Beefsteak Tomato", "Albino Eggplant", "Turnip", "Strawberry", "Green Pepper",
-      "Lobbericher Carrot", "Cherokee Tomato", "Red Cabbage", "Common Spinach",
-      "Yellow Beefsteak Tomato", "Cabernet Grape", "Yellow Cherry Tomato", "Oriole Chard",
-      "Yellow Onion", "Baby Boo Pumpkin", "Crimson Grape", "Javelin Parsnip", "Savoy Cabbage",
-      "White Garlic", "Black Cherry Tomato", "Sweet Onion", "Pineberry", "Brussels Sprouts",
-      "Red Spinach", "Red Garlic", "Napa Cabbage", "Lunar White Carrot", "Black Peppercorn",
-      "Bright Lights Chard", "Monterey Celery", "Gold Pineapple", "Arborio Rice",
-      "Albion Parsnip", "Black Garlic", "Radicchio", "Green Peppercorn", "French Bean",
-      "Rhubarb Chard", "Golden Pascal Celery", "Shallot", "Mauritius Pineapple", "Purple Garlic",
-      "Soy Bean", "Jersey Asparagus", "Pink Peppercorn", "Basmati Rice", "Flat Parsley",
-      "Hyacinth Bean", "Red Pineapple", "White Peppercorn", "Purple Sweet Asparagus",
-      "White Onion", "Chinese Pink Celery", "Black Japonica Rice", "Virginia Peanut",
-      "Curley Parsley", "Broad Bean", "Mary Washington Asparagus", "Red Onion",
-      "Red Giant Celery", "Red Aromatic Rice", "Coriander"
+    "Cantaloupe Melon", "Spanish Peanut", "Lombardy Cabbage", "Melon", "Lucullus Chard",
+    "Lentil", "Wheat", "Lucky Coins", "Junin Corn", "Gladiator Parsnip", "Pumpkin",
+    "Creepy Pumpkin", "Cosmic Purple Carrot", "Carolina Potato", "Romantic Balloons",
+    "Golden Beet", "Eggplant", "Honeycomb Tomato", "Watermelon", "Delightful Gift",
+    "Beefsteak Tomato", "Chickpea", "Vitolette Potato", "Gilded Eggs", "Rye", "Yellow Pepper",
+    "Shimmering Sparkler", "Lodge Zucchini", "Concord Grape", "Chinese Eggplant", "Kyoto Carrot",
+    "Strawberry Dango", "Green Cabbage", "Acorn Pumpkin", "Cucumber", "Cherry Tomato",
+    "Chocolate Cake Slices", "Barley", "Strawberry Red Corn", "Thomson Grape", "Cat Tinkerbells",
+    "Canary Melon", "Black Beefsteak Tomato", "Albino Eggplant", "Turnip", "Strawberry",
+    "Green Pepper", "Lobbericher Carrot", "Cherokee Tomato", "Red Cabbage", "Common Spinach",
+    "Yellow Beefsteak Tomato", "Cabernet Grape", "Yellow Cherry Tomato", "Oriole Chard",
+    "Yellow Onion", "Baby Boo Pumpkin", "Crimson Grape", "Javelin Parsnip", "Savoy Cabbage",
+    "White Garlic", "Black Cherry Tomato", "Sweet Onion", "Pineberry", "Brussels Sprouts",
+    "Red Spinach", "Red Garlic", "Napa Cabbage", "Lunar White Carrot", "Black Peppercorn",
+    "Bright Lights Chard", "Monterey Celery", "Gold Pineapple", "Arborio Rice", "Albion Parsnip",
+    "Black Garlic", "Radicchio", "Green Peppercorn", "French Bean", "Rhubarb Chard",
+    "Golden Pascal Celery", "Shallot", "Mauritius Pineapple", "Purple Garlic", "Soy Bean",
+    "Jersey Asparagus", "Pink Peppercorn", "Basmati Rice", "Hyacinth Bean", "Red Pineapple",
+    "White Peppercorn", "Purple Sweet Asparagus", "White Onion", "Chinese Pink Celery",
+    "Black Japonica Rice", "Virginia Peanut", "Broad Bean", "Mary Washington Asparagus",
+    "Red Onion", "Red Giant Celery", "Red Aromatic Rice"
+  ],
+  Herbs: [
+    "Roman Chamomile", "Green Tea", "Dyer's Chamomile", "Black Tea", "Common Mint", "Matcha Tea",
+    "Flat Parsley", "Licorice", "Chocolate Mint", "Pu'er Tea", "Curly Parsley", "Common Thyme",
+    "Orange Mint", "Coriander", "Pineapple Mint", "Italian Basil", "French Thyme", "Lemon Basil",
+    "Osmin Basil"
   ],
   Trees: [
     "Apple Tree", "Lemon Tree", "Pear Tree", "Pine Tree", "Banana Tree", "Peach Tree",
-      "Orange Tree", "Money Tree", "Royal Gala Apple Tree", "Coconut Tree", "Black Mulberry",
-      "Apricot Tree", "Fruit Bat Tree", "Lime Tree", "Flowering Cherry Tree",
-      "Reinette Apple Tree", "Red Mulberry", "Bamboo", "English Holly", "Prickly Pear Cactus",
-      "Raspberry", "Fargesia Bamboo", "White Mulberry", "Plum Tree", "Burro Banana Tree",
-      "Golden Bamboo", "Tangerine Tree", "Mango", "Granny Smith Apple Tree", "Haden Mango",
-      "Hawaiian Holly", "Kent Mango", "Walnut Tree", "Quince Tree", "Mango Alphonso", "Yuzu Tree",
-      "Clove Tree", "Golden Apple Tree", "Blood Tangerine", "Black Walnut Tree", "Almond Tree",
-      "Red Dacca Banana Tree", "Ceylon Cinnamon Tree", "Blueberry", "Inkberry Holly",
-      "Wonderful Pomegranate", "Cassia Cinnamon Tree", "Livermore Walnut Tree", "Pistachio Tree",
-      "Purple Heart Pomegranate", "Blue Java Banana Tree", "Forastero Cocoa Tree",
-      "Brown Turkey Fig Tree", "Redcurrant", "Bing Cherry", "Criollo Cocoa Tree",
-      "Haku Botan Pomegranate", "Adriatic Fig Tree", "Hass Avocado", "Trinitario Cocoa Tree",
-      "Rainier Cherry", "Common Dragonfruit Tree", "Gwen Avocado", "Yellow Dragonfruit Tree",
-      "Black Pearl Cherry", "Pinkerton Avocado"
+    "Orange Tree", "Chrome Cyber Tree", "Money Tree", "Royal Gala Apple Tree", "Coconut Tree",
+    "Black Mulberry", "Apricot Tree", "Fruit Bat Tree", "Lime Tree", "Flowering Cherry Tree",
+    "Reinette Apple Tree", "Red Mulberry", "Bamboo", "English Holly", "Prickly Pear Cactus",
+    "Raspberry", "Jade Cyber Tree", "Fargesia Bamboo", "White Mulberry", "Plum Tree",
+    "Burro Banana Tree", "Golden Bamboo", "Tangerine Tree", "Mango", "Granny Smith Apple Tree",
+    "Haden Mango", "Hawaiian Holly", "Kent Mango", "Walnut Tree", "Quince Tree",
+    "Mango Alphonso", "Yuzu Tree", "Bronze Cyber Tree", "Clove Tree", "Golden Apple Tree",
+    "Blood Tangerine", "Black Walnut Tree", "Almond Tree", "Red Dacca Banana Tree",
+    "Ceylon Cinnamon Tree", "Blueberry", "Inkberry Holly", "Wonderful Pomegranate",
+    "Cassia Cinnamon Tree", "Livermore Walnut Tree", "Pistachio Tree",
+    "Purple Heart Pomegranate", "Blue Java Banana Tree", "Forastero Cocoa Tree",
+    "Brown Turkey Fig Tree", "Redcurrant", "Bing Cherry", "Criollo Cocoa Tree",
+    "Haku Botan Pomegranate", "Adriatic Fig Tree", "Hass Avocado", "Trinitario Cocoa Tree",
+    "Rainier Cherry", "Common Dragonfruit Tree", "Gwen Avocado", "Yellow Dragonfruit Tree",
+    "Black Pearl Cherry", "Pinkerton Avocado"
   ],
   Flowers: [
-    "Rose", "Marbled Poinsettia", "Daisy", "Ramanas Rose", "China Pink Tulip", "Shasta Daisy",
-      "Saffron Crocus", "Bizet Carnation", "Damask Rose", "Swan River Daisy",
-      "Common Venus Flytrap", "Orange Princess Tulip", "Provence Rose", "Domingo Carnation",
-      "Poppy", "Cape Daisy", "Arabian Mystery Tulip", "Edelweiss", "Grandiflora Rose",
-      "Iceland Poppy", "White Liberty Carnation", "Flavus Crocus", "Sevilla Tulip",
-      "Celestial Morning Glory", "Midnight Venus Flytrap", "California Poppy",
-      "Salamanca Carnation", "Noah Morning Glory", "Blue Diamond Tulips", "Arabian Poppy",
-      "African Daisy", "Silk Morning Glory", "Royal Blue Carnation", "Caldera Red Geranium",
-      "Flanders Poppy", "Pearly Morning Glory", "Velvet Venus Flytrap", "Snow Bunting Crocus",
-      "Sunforest Sunflower", "Cranesbill Geranium", "Heavenly Blue Morning Glory",
-      "Royal Blue Poinsettia", "Horizon White Geranium", "Crimson Venus Flytrap",
-      "Earthwalker Sunflower", "Sieberi Crocus", "Gatsby Pink Hydrangea", "Astro Red Poinsettia",
-      "Orange Monarch Crocus", "Italian White Sunflower", "Blue Sky Noon Geranium",
-      "Nikko Blue Hydrangea", "Sunrise Geranium", "Strawberry Blonde Sunflower",
-      "Gold Rush Poinsettia", "Limelight Hydrangea", "Suntastic Sunflower",
-      "Mars Pink Poinsettia", "Lauren's Grape Poppy", "Magical Hydrangea",
-      "Polar Bear Poinsettia", "Red Baron Hydrangea"
+    "Rose", "Marbled Poinsettia", "Candy Stripe Phlox", "Daisy", "Ramanas Rose",
+    "China Pink Tulip", "Shasta Daisy", "Saffron Crocus", "Bizet Carnation", "Damask Rose",
+    "Swan River Daisy", "Common Venus Flytrap", "Orange Princess Tulip", "Provence Rose",
+    "Domingo Carnation", "Poppy", "Cape Daisy", "Arabian Mystery Tulip", "Edelweiss",
+    "Grandiflora Rose", "Iceland Poppy", "White Liberty Carnation", "Flavus Crocus",
+    "Sevilla Tulip", "Celestial Morning Glory", "Midnight Venus Flytrap", "California Poppy",
+    "Salamanca Carnation", "Noah Morning Glory", "Blue Diamond Tulips", "Arabian Poppy",
+    "African Daisy", "Silk Morning Glory", "Royal Blue Carnation", "Caldera Red Geranium",
+    "Flanders Poppy", "Pearly Morning Glory", "Velvet Venus Flytrap", "Snow Bunting Crocus",
+    "Sunforest Sunflower", "Cranesbill Geranium", "Heavenly Blue Morning Glory",
+    "Royal Blue Poinsettia", "Horizon White Geranium", "Crimson Venus Flytrap",
+    "Earthwalker Sunflower", "Sieberi Crocus", "Gatsby Pink Hydrangea", "Astro Red Poinsettia",
+    "Orange Monarch Crocus", "Italian White Sunflower", "Blue Sky Noon Geranium",
+    "McDaniel's Cushion Phlox", "Nikko Blue Hydrangea", "Sunrise Geranium",
+    "Strawberry Blonde Sunflower", "Gold Rush Poinsettia", "Purple Beauty Phlox",
+    "Limelight Hydrangea", "Suntastic Sunflower", "Mars Pink Poinsettia", "Lauren's Grape Poppy",
+    "Mont Blanc Phlox", "Magical Hydrangea", "Polar Bear Poinsettia", "Red Baron Hydrangea",
+    "Emerald Blue Phlox"
   ],
   Animals: [
     "Leghorn Chicken", "Landrace Pig", "New Hampshire Chicken", "Hampshire Pig",
-      "Australorp Chicken", "Holstein Cow", "Unicorn", "Easter Rabbit", "Jersey Giant Chicken",
-      "Rainbow Alpaca", "Jersey Cow", "Large Black Pig", "Hampshire Sheep", "Orpington Chicken",
-      "Belted Cow", "Hereford Pig", "Merino Sheep", "Abacot Ranger Duck", "Serama Bantam Chicken",
-      "Ayrshire Cow", "Duroc Pig", "Alpine Goat", "Gotland Sheep", "Pekin Duck", "Girolando Cow",
-      "Kunekune Pig", "Black Bengal Goat", "Dutch Rabbit", "Romanov Sheep", "Duckling",
-      "Bourbon Red Turkey", "Jacob Sheep", "Suri Alpaca", "Magpie Duck", "Tyrol Grey Cow",
-      "Saanen Goat", "Netherland Dwarf Rabbit", "Black Welsh Sheep", "Norfolk Black Turkey",
-      "Cayuga Duck", "American Quarter Horse", "Australian Brown Goat", "Alaska Rabbit",
-      "Muscovy Duck", "Nigerian Dwarf Goat", "Beltsville White Turkey", "Common Peafowl",
-      "Huacaya Alpaca", "Belgian Fawn Goat", "Arabian Horse", "Flemish Giant Rabbit",
-      "Grand Noir Donkey", "Wild Turkey", "Green Peafowl", "Harlequin Rabbit", "Friesian Horse",
-      "Llama", "Royal Palm Turkey", "Miranda Donkey", "Californian Rabbit", "White Peafowl",
-      "American Paint Horse", "Ocellated Turkey", "Appaloosa Horse", "Opal Peafowl",
-      "Andalusian Donkey", "Holsteiner Horse", "Miniatura Donkey", "Provence Donkey",
-      "Asinara Donkey"
+    "Australorp Chicken", "Holstein Cow", "Unicorn", "Easter Rabbit", "Jersey Giant Chicken",
+    "Rainbow Alpaca", "Jersey Cow", "Large Black Pig", "Pastel Llama", "Hampshire Sheep",
+    "Orpington Chicken", "Belted Cow", "Hereford Pig", "Merino Sheep", "Abacot Ranger Duck",
+    "Serama Bantam Chicken", "Ayrshire Cow", "Duroc Pig", "Alpine Goat", "Gotland Sheep",
+    "Pekin Duck", "Girolando Cow", "Kunekune Pig", "Black Bengal Goat", "Dutch Rabbit",
+    "Romanov Sheep", "Duckling", "Bourbon Red Turkey", "Jacob Sheep", "Suri Alpaca",
+    "Magpie Duck", "Tyrol Grey Cow", "Saanen Goat", "Netherland Dwarf Rabbit",
+    "Black Welsh Sheep", "Norfolk Black Turkey", "Cayuga Duck", "American Quarter Horse",
+    "Australian Brown Goat", "Alaska Rabbit", "Muscovy Duck", "Nigerian Dwarf Goat",
+    "Beltsville White Turkey", "Common Peafowl", "Huacaya Alpaca", "Belgian Fawn Goat",
+    "Arabian Horse", "Flemish Giant Rabbit", "Grand Noir Donkey", "Wild Turkey", "Green Peafowl",
+    "Harlequin Rabbit", "Friesian Horse", "Llama", "Royal Palm Turkey", "Miranda Donkey",
+    "Californian Rabbit", "White Peafowl", "American Paint Horse", "Ocellated Turkey",
+    "Appaloosa Horse", "Opal Peafowl", "Andalusian Donkey", "Holsteiner Horse",
+    "Miniatura Donkey", "Provence Donkey", "Asinara Donkey"
   ],
   Fish: [
-    "Clownfish", "Salmon", "Amber Clownfish", "Blowfish", "Crimson Salmon", "Swordfish", "Trout",
-      "Ebony Clownfish", "Viridian Salmon", "Surgeonfish", "Cocoa Blowfish", "Coral Trout",
-      "Topaz Swordfish", "Platinum Surgeonfish", "Sardine", "Cerulean Blowfish", "Brass Trout",
-      "Emerald Swordfish", "Bronze Surgeonfish", "Slinger Seabream", "Pacific Sardinella",
-      "Silver Hake", "Hottentot Seabream", "Toothfish", "Vermillion Snapper", "White Sardine",
-      "Pacific Hake", "Ginrin Koi", "Black Snapper", "Seventyfour Seabream", "Utsuri Koi",
-      "Yellowtail Snapper", "Shusui Koi", "Kikokuryu Koi", "Tancho Koi"
+    "Clownfish", "Salmon", "Amber Clownfish", "Blowfish", "Crimson Salmon", "Neon Tetra",
+    "Swordfish", "Trout", "Ebony Clownfish", "Viridian Salmon", "Surgeonfish", "Cocoa Blowfish",
+    "Coral Trout", "Topaz Swordfish", "Ember Tetra", "Platinum Surgeonfish", "Sardine",
+    "Cerulean Blowfish", "Brass Trout", "Emerald Swordfish", "Bronze Surgeonfish",
+    "Slinger Seabream", "Glowlight Tetra", "Pacific Sardinella", "Silver Hake",
+    "Hottentot Seabream", "Toothfish", "Vermillion Snapper", "Emperor Tetra", "White Sardine",
+    "Pacific Hake", "Ginrin Koi", "Cardinal Tetra", "Black Snapper", "Seventyfour Seabream",
+    "Utsuri Koi", "Yellowtail Snapper", "Johnson's Anglerfish", "Shusui Koi",
+    "Murray's Anglerfish", "Pike Piranha", "Kikokuryu Koi", "Red-Bellied Piranha",
+    "Atlantic Footballfish", "Tancho Koi", "Leucistic Axolotl", "Black Piranha",
+    "Triplewart Seadevil", "Wild Axolotl", "San Francisco Piranha", "Melanoid Axolotl",
+    "Copper Axolotl"
   ],
 };
 
@@ -731,6 +750,7 @@ let brush = { type:1, item:0 };   // item 0 = nothing planted
 let sel = null;                   // {x0,y0,x1,y1}
 let clip = null;                  // copied region
 let hover = null, lastTile = null;
+let hoverField = null, hoverFieldKey = -1;   // the block under the cursor, when snapping to fields
 let drag = null;
 let undoStack = [], redoStack = [];
 let dirty = false, saveTimer = null;
@@ -1013,14 +1033,28 @@ function edgeUnder(px, py, force){
   const y = clamp(ny,0,S.H), x = clamp(Math.floor(fx),0,S.W-1);
   return { idx:eIdx(x,y), bit:EDGE_H, x, y };
 }
-/* Painted live, then recorded as one undo step when the drag ends. */
-function paintEdge(px, py, on, touched, force){
-  const e = edgeUnder(px, py, force);
-  const cur = S.edge[e.idx];
-  const nv = on ? (cur|e.bit) : (cur & ~e.bit);
-  if(nv === cur) return;
-  if(!touched.has(e.idx)) touched.set(e.idx, cur);
-  S.edge[e.idx] = nv;
+/* A single-line drag stays on the one line it started on, and fills in every
+   segment between the last position and this one, so a fast drag leaves no gaps.
+   Painted live, then recorded as one undo step when the drag ends. */
+function alongAt(px, py, axis){
+  const [fx, fy] = toTileF(px, py);
+  return axis===EDGE_V ? clamp(Math.floor(fy), 0, S.H-1) : clamp(Math.floor(fx), 0, S.W-1);
+}
+const edgeAt = (axis, line, along) => axis===EDGE_V ? eIdx(line, along) : eIdx(along, line);
+
+function paintRun(px, py, d){
+  const cur = alongAt(px, py, d.axis);
+  const from = d.last===undefined ? cur : d.last;
+  const step = cur >= from ? 1 : -1;
+  for(let a = from; a !== cur + step; a += step){
+    const i = edgeAt(d.axis, d.line, a);
+    const was = S.edge[i];
+    const nv = d.on ? (was | d.axis) : (was & ~d.axis);
+    if(nv === was) continue;
+    if(!d.touched.has(i)) d.touched.set(i, was);
+    S.edge[i] = nv;
+  }
+  d.last = cur;
 }
 function commitPaintedEdges(touched){
   const idx=[], ov=[], nv=[];
@@ -1030,6 +1064,30 @@ function commitPaintedEdges(touched){
   if(undoStack.length>60) undoStack.shift();
   redoStack.length = 0;
   afterEdit();
+}
+
+/* The extent of the connected run of identical tiles containing (tx,ty) —
+   one crop's field, one pond, one road, whatever is under the cursor. */
+let fieldSeen = null;   // scratch buffer, reused so hovering doesn't churn memory
+function fieldBounds(tx, ty){
+  if(tx<0||ty<0||tx>=S.W||ty>=S.H) return null;
+  const start = ty*S.W+tx, t0 = S.type[start], k0 = S.item[start];
+  if(!fieldSeen || fieldSeen.length !== S.W*S.H) fieldSeen = new Uint8Array(S.W*S.H);
+  else fieldSeen.fill(0);
+  const seen = fieldSeen, stack = [start];
+  let x0=tx, x1=tx, y0=ty, y1=ty;
+  seen[start] = 1;
+  while(stack.length){
+    const i = stack.pop(), x = i % S.W, y = (i / S.W) | 0;
+    if(x<x0) x0=x; if(x>x1) x1=x;
+    if(y<y0) y0=y; if(y>y1) y1=y;
+    const push = j => { if(j>=0 && j<seen.length && !seen[j] && S.type[j]===t0 && S.item[j]===k0){ seen[j]=1; stack.push(j); } };
+    if(x>0)     push(i-1);
+    if(x<S.W-1) push(i+1);
+    if(y>0)     push(i-S.W);
+    if(y<S.H-1) push(i+S.W);
+  }
+  return { x0, y0, x1, y1 };
 }
 
 /* Every fence in and around a rectangle — what "remove" should take down. */
@@ -1059,6 +1117,7 @@ function perimeterEdges(rect, on){
 function undo(){ const r=undoStack.pop(); if(!r) return; applyRec(r,true); redoStack.push(r); afterEdit(); }
 function redo(){ const r=redoStack.pop(); if(!r) return; applyRec(r,false); undoStack.push(r); afterEdit(); }
 function afterEdit(){
+  hoverFieldKey = -1;
   markDirty(); draw(); renderReport(); if($("#onlyUsed").checked) renderLibrary();
   $("#undoBtn").disabled = !undoStack.length;
   $("#redoBtn").disabled = !redoStack.length;
@@ -1254,7 +1313,9 @@ function draw(){
   // ---- selection, drag preview, stamp preview, hover
   if(sel) strokeRect(sel, "rgba(255,255,255,.9)", true);
   if(drag && drag.mode==="rect"){
-    const r = clampRect(snapRect(normRect({x0:drag.tx0,y0:drag.ty0,x1:drag.tx1,y1:drag.ty1})));
+    const r = drag.fieldRect
+      ? clampRect(drag.fieldRect)
+      : clampRect(snapRect(normRect({x0:drag.tx0,y0:drag.ty0,x1:drag.tx1,y1:drag.ty1})));
     if(drag.tool==="paint"){
       ctx.globalAlpha = .55; ctx.fillStyle = brushColor();
       ctx.fillRect(sx(r.x0), sy(r.y0), (r.x1-r.x0+1)*s, (r.y1-r.y0+1)*s);
@@ -1311,7 +1372,17 @@ function draw(){
     ctx.globalAlpha = 1;
     strokeRect(r, "#f0a933", true); badge(r);
   }
-  if(hover && !drag && tool!=="stamp" && !(tool==="paint" && fixOn())){
+  if(tool==="fence" && hoverField && !drag){
+    ctx.save();
+    ctx.globalAlpha = .3;
+    ctx.fillStyle = (fenceOn ? FENCE_COLOR : "#e0654a");
+    ctx.fillRect(sx(hoverField.x0), sy(hoverField.y0),
+                 (hoverField.x1-hoverField.x0+1)*s, (hoverField.y1-hoverField.y0+1)*s);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+    strokeRect(hoverField, fenceOn ? FENCE_COLOR : "#e0654a", true);
+  }
+  if(hover && !drag && tool!=="stamp" && !hoverField && !(tool==="paint" && fixOn())){
     const [hx,hy] = hover;
     if(hx>=0&&hy>=0&&hx<S.W&&hy<S.H){
       ctx.strokeStyle = "rgba(255,255,255,.85)"; ctx.lineWidth = 1;
@@ -1396,20 +1467,25 @@ cv.addEventListener("pointerdown", e => {
     drag = null; return;
   }
   const panning = e.button===1 || e.button===2 || tool==="pan" || spaceDown;
-  if(panning){ drag = { mode:"pan", px:e.offsetX, py:e.offsetY }; cv.className="panning"; return; }
+  if(panning){
+    drag = { mode:"pan", px:e.offsetX, py:e.offsetY, btn:e.button, ox:e.offsetX, oy:e.offsetY, moved:false };
+    cv.className = "panning"; return;
+  }
 
   const [tx,ty] = toTile(e.offsetX, e.offsetY);
   if(tool==="pick"){ pickAt(tx,ty); return; }
   if(tool==="stamp"){ stampAt(tx,ty); return; }
   if(tool==="fence" && fenceMode==="single"){
     const first = edgeUnder(e.offsetX, e.offsetY);
-    drag = { mode:"edge", on:(fenceOn !== e.altKey), touched:new Map(), axis:first.bit };
-    paintEdge(e.offsetX, e.offsetY, drag.on, drag.touched, drag.axis);
+    drag = { mode:"edge", on:(fenceOn !== e.altKey), touched:new Map(),
+             axis:first.bit, line:(first.bit===EDGE_V ? first.x : first.y) };
+    paintRun(e.offsetX, e.offsetY, drag);
     draw(); return;
   }
   if(e.altKey && tool!=="fence"){ fillPlotAt(tx,ty); return; }
   if(tool==="paint" && fixOn()){ writeRect(fixedRectAt(tx,ty), brushPaint()); return; }
   drag = { mode:"rect", tool, alt:e.altKey, tx0:tx, ty0:ty, tx1:tx, ty1:ty };
+  if(tool==="fence" && $("#fenceField").checked) drag.fieldRect = fieldBounds(tx, ty);
   draw();
 });
 cv.addEventListener("pointermove", e => {
@@ -1422,8 +1498,10 @@ cv.addEventListener("pointermove", e => {
   }
   hover = toTile(e.offsetX, e.offsetY);
   if(hover[0]>=0 && hover[1]>=0 && hover[0]<S.W && hover[1]<S.H) lastTile = hover;
+  updateHoverField();
   showTip(e.offsetX, e.offsetY);
   if(drag && drag.mode==="pan"){
+    if(Math.hypot(e.offsetX-drag.ox, e.offsetY-drag.oy) > 4) drag.moved = true;
     view.x -= (e.offsetX-drag.px)/view.s; view.y -= (e.offsetY-drag.py)/view.s;
     drag.px = e.offsetX; drag.py = e.offsetY; clampView(); draw(); return;
   }
@@ -1431,7 +1509,7 @@ cv.addEventListener("pointermove", e => {
     const [tx,ty] = toTile(e.offsetX, e.offsetY);
     drag.tx1 = clamp(tx,0,S.W-1); drag.ty1 = clamp(ty,0,S.H-1);
   }
-  if(drag && drag.mode==="edge") paintEdge(e.offsetX, e.offsetY, drag.on, drag.touched, drag.axis);
+  if(drag && drag.mode==="edge") paintRun(e.offsetX, e.offsetY, drag);
   lastPx = e.offsetX; lastPy = e.offsetY;
   draw(); updateStatus();
 });
@@ -1443,12 +1521,18 @@ function endPointer(e){
     commitPaintedEdges(drag.touched);
     drag = null; draw(); updateStatus(); return;
   }
+  /* A right-click that didn't turn into a pan means "drop what I'm holding". */
+  if(drag.mode==="pan" && drag.btn===2 && !drag.moved){
+    drag = null; cancelHold(); return;
+  }
   if(drag.mode==="rect"){
-    const r = clampRect(snapRect(normRect({x0:drag.tx0,y0:drag.ty0,x1:drag.tx1,y1:drag.ty1})));
+    const r = drag.fieldRect
+      ? clampRect(drag.fieldRect)
+      : clampRect(snapRect(normRect({x0:drag.tx0,y0:drag.ty0,x1:drag.tx1,y1:drag.ty1})));
     if(drag.tool==="paint") writeRect(r, brushPaint());
     else if(drag.tool==="fence")
       commit(null, collectEdges((fenceOn !== drag.alt) ? perimeterEdges(r, true) : clearEdgesIn(r)));
-    else { sel = r; }
+    else { sel = r; renderToolOpts(); }
   }
   drag = null; cv.className = tool==="pan" ? "panready" : (tool==="pick" ? "picking" : "");
   draw(); updateStatus();
@@ -1458,6 +1542,18 @@ cv.addEventListener("pointercancel", endPointer);
 cv.addEventListener("pointerleave", () => { hover=null; hideTip(); draw(); updateStatus(); });
 
 /* Most fields only have room for a three-letter code, so hovering spells it out. */
+/* Worked out only when the cursor moves to a different tile — a flood fill on
+   every frame would be wasteful. */
+function updateHoverField(){
+  if(tool!=="fence" || !$("#fenceField").checked || !hover ||
+     hover[0]<0 || hover[1]<0 || hover[0]>=S.W || hover[1]>=S.H){
+    hoverField = null; hoverFieldKey = -1; return;
+  }
+  const key = hover[1]*S.W + hover[0];
+  if(key === hoverFieldKey) return;
+  hoverFieldKey = key;
+  hoverField = fieldBounds(hover[0], hover[1]);
+}
 function showTip(px, py){
   const el = $("#tip");
   if(drag || !hover || hover[0]<0 || hover[1]<0 || hover[0]>=S.W || hover[1]>=S.H) return hideTip();
@@ -1475,6 +1571,15 @@ cv.addEventListener("wheel", e => {
   e.preventDefault();
   zoomAt(e.offsetX, e.offsetY, e.deltaY<0 ? 1.16 : 1/1.16);
 }, {passive:false});
+
+/* Put down the selection and the paste, and go back to painting with
+   whatever ground type or crop is loaded. */
+function cancelHold(){
+  const had = sel ? "selection" : (tool==="stamp" ? "paste" : null);
+  sel = null;
+  if(tool!=="paint") setTool("paint"); else { renderToolOpts(); draw(); updateStatus(); }
+  if(had) flash(`Dropped the ${had} — back to painting.`);
+}
 
 function pickAt(tx,ty){
   if(tx<0||ty<0||tx>=S.W||ty>=S.H) return;
@@ -1517,10 +1622,10 @@ addEventListener("keydown", e => {
   if((e.ctrlKey||e.metaKey) && k==="c"){ e.preventDefault(); copySel(); return; }
   if((e.ctrlKey||e.metaKey) && k==="v"){ e.preventDefault(); if(clip) setTool("stamp"); return; }
   if(e.ctrlKey||e.metaKey||e.altKey) return;
-  if(k==="escape"){ sel=null; if(tool==="stamp") setTool("paint"); draw(); updateStatus(); return; }
+  if(k==="escape"){ cancelHold(); return; }
   if(k==="f"){ fitView(); return; }
   if(k==="r"){ rotateFixed(); return; }
-  if(k==="delete"||k==="backspace"){ if(sel) writeRect(sel, ()=>[0,0]); return; }
+  if(k==="delete"||k==="backspace"){ if(sel) clearSelection(); return; }
   if(k==="enter"){ if(sel) writeRect(sel, brushPaint()); return; }
   if(k in KEYMAP){
     const v = KEYMAP[k];
@@ -1535,18 +1640,28 @@ addEventListener("keyup", e => {
 /* ==========================================================================
    9. LEFT PANEL UI
    ========================================================================== */
+const ICON = {
+  paint:  `<rect x="2.5" y="2.5" width="11" height="11" rx="1.5" fill="currentColor" opacity=".8"/>`,
+  select: `<rect x="2.5" y="2.5" width="11" height="11" rx="1" stroke-dasharray="3 2.2"/>`,
+  stamp:  `<rect x="2" y="2" width="8" height="8" rx="1"/><rect x="6" y="6" width="8" height="8" rx="1"/>`,
+  fence:  `<path d="M4.5 3v10M8 3v10M11.5 3v10M2 6.2h12M2 10h12"/>`,
+  pick:   `<circle cx="8" cy="8" r="4.6"/><circle cx="8" cy="8" r="1.3" fill="currentColor" stroke="none"/>`,
+  pan:    `<path d="M8 2.6v10.8M2.6 8h10.8M6.2 4.8 8 2.9l1.8 1.9M6.2 11.2 8 13.1l1.8-1.9M4.8 6.2 2.9 8l1.9 1.8M11.2 6.2 13.1 8l-1.9 1.8"/>`
+};
+const svg = k => `<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${ICON[k]}</svg>`;
+
 const TOOLS = [
   { id:"paint",  name:"Paint rectangle", key:"B" },
   { id:"select", name:"Select area",     key:"M" },
   { id:"stamp",  name:"Paste copy",      key:"V" },
-  { id:"fence",  name:"Fence a rectangle", key:"E" },
+  { id:"fence",  name:"Draw fences",     key:"E" },
   { id:"pick",   name:"Pick from farm",  key:"I" },
   { id:"pan",    name:"Pan",             key:"H" }
 ];
 function renderTools(){
   $("#tools").innerHTML = TOOLS.map(t =>
     `<button class="tool ${tool===t.id?"on":""}" data-tool="${t.id}">
-       <span>${t.name}</span><kbd>${t.key}</kbd></button>`).join("");
+       ${svg(t.id)}<span>${t.name}</span><kbd>${t.key}</kbd></button>`).join("");
   $$("#tools .tool").forEach(b => b.onclick = () => setTool(b.dataset.tool));
 }
 function renderToolOpts(){
@@ -1556,9 +1671,15 @@ function renderToolOpts(){
   if(n) n.textContent = clip ? `Holding a ${clip.w} × ${clip.h} block. Click the map to drop a copy; Esc when you're done.`
                              : "Nothing copied yet. Select an area and press Copy.";
 }
+/* Choosing a ground type or a crop normally drops you on the paint tool — but not
+   while you have a selection open, because filling it is the obvious next move. */
+function afterPick(){ if(!(tool==="select" && sel)) setTool("paint"); }
+
 function setTool(id){
   if(id==="stamp" && !clip){ flash("Copy an area first — select one, then Copy."); return; }
-  tool = id; renderTools(); renderToolOpts();
+  /* A selection only means something to the select tool, so leaving it drops it. */
+  if(id !== "select") sel = null;
+  tool = id; hoverField = null; hoverFieldKey = -1; renderTools(); renderToolOpts();
   cv.className = id==="pan" ? "panready" : (id==="pick" ? "picking" : "");
   updateStatus(); draw();
 }
@@ -1573,6 +1694,7 @@ function renderTypes(){
   $$("#typeMenu .pickrow").forEach(b => b.onclick = () => {
     $("#typeMenu").hidden = true;
     setBrush(+b.dataset.t, 0);
+    afterPick();
   });
 }
 $("#typeBtn").onclick = () => { const m = $("#typeMenu"); m.hidden = !m.hidden; };
@@ -1593,7 +1715,10 @@ function setBrush(type, item){
       $("#fixW").value = fp[0]; $("#fixH").value = fp[1];
     }
     $("#fixOn").checked = true; autoFix = true;
-    if(tool!=="paint"){ tool = "paint"; renderTools(); }
+    if(!(tool==="select" && sel)){
+      sel = null;
+      if(tool!=="paint"){ tool = "paint"; renderTools(); }
+    }
   }else if(autoFix){
     $("#fixOn").checked = false; autoFix = false;
   }
@@ -1621,9 +1746,13 @@ function copySel(){
   updateStatus();
 }
 $("#selFill").onclick  = () => sel ? writeRect(sel, brushPaint()) : flash("Nothing selected.");
-$("#selClear").onclick = () => sel ? writeRect(sel, ()=>[0,0])    : flash("Nothing selected.");
+$("#selClear").onclick = () => sel ? clearSelection() : flash("Nothing selected.");
+function clearSelection(){
+  const n = commit(collectTiles(sel, ()=>[0,0]), collectEdges(clearEdgesIn(sel)));
+  flash(n ? "Cleared back to grass, fences and all." : "That area is already clear.");
+}
 $("#selCopy").onclick  = copySel;
-$("#selNone").onclick  = () => { sel=null; draw(); updateStatus(); };
+$("#selNone").onclick  = () => { sel=null; renderToolOpts(); draw(); updateStatus(); };
 $("#fillPlot").onclick = () => {
   const t = hover || lastTile;
   if(!t) return flash("Point at a plot on the map first, then press this.");
@@ -1660,6 +1789,7 @@ function renderPresets(){
   });
 }
 ["optGrid","optPlots","optLabels","optFences"].forEach(id => $("#"+id).onchange = draw);
+$("#fenceField").onchange = () => { hoverFieldKey = -1; updateHoverField(); draw(); };
 let fenceOn = true, fenceMode = "rect";
 $("#fenceAdd").onclick = () => { fenceOn = true;  $("#fenceAdd").classList.add("on"); $("#fenceDel").classList.remove("on"); setTool("fence"); };
 $("#fenceDel").onclick = () => { fenceOn = false; $("#fenceDel").classList.add("on"); $("#fenceAdd").classList.remove("on"); setTool("fence"); };
@@ -1709,6 +1839,7 @@ function renderLibrary(){
     const it = LIB.get(k);
     const t = (it && it.cat === "Fish") ? 3 : 1;   // fish go in water, the rest on plowed land
     setBrush(t, k);
+    afterPick();
   });
   $$("#liblist .ed").forEach(b => b.onclick = e => { e.stopPropagation(); editItem(+b.dataset.edit); });
 }
@@ -1719,7 +1850,7 @@ $("#onlyUsed").onchange = renderLibrary;
 $("#addItem").onclick = () => editItem(null);
 function editItem(key){
   const it = key ? LIB.get(key) : { name:"", cat:categories()[1]||"Crops", color:"#7aa84a", code:"" };
-  const cats = [...new Set([...DOC.library.map(i=>i.cat), "Crops","Trees","Flowers","Animals","Fish","Other"])];
+  const cats = [...new Set([...DOC.library.map(i=>i.cat), "Crops","Herbs","Trees","Flowers","Animals","Fish","Other"])];
   openModal(key ? "Edit item" : "Add item", `
     <div><label>Name</label><input class="field" id="mName" value="${esc(it.name)}"></div>
     <div><label>Category</label>
@@ -1753,7 +1884,7 @@ function deleteItem(key){
 function countKey(key){ let n=0; for(let i=0;i<S.item.length;i++) if(S.item[i]===key) n++; return n; }
 
 $("#bulkItem").onclick = () => {
-  const cats = [...new Set([...DOC.library.map(i=>i.cat), "Crops","Trees","Flowers","Animals","Fish","Other"])];
+  const cats = [...new Set([...DOC.library.map(i=>i.cat), "Crops","Herbs","Trees","Flowers","Animals","Fish","Other"])];
   openModal("Add many items", `
     <div><label>Category</label>
       <select class="field" id="bCat">${cats.map(c=>`<option>${esc(c)}</option>`).join("")}</select></div>
@@ -2223,7 +2354,7 @@ function defaultHint(){
            select:"drag to select · then Fill, Clear or Copy",
            stamp:"click to paste the copied area · esc to stop",
            fence: fenceMode==="single"
-                    ? "click or drag along the lines · alt does the opposite"
+                    ? "drag along one line · it won't jump to the next · alt does the opposite"
                     : "drag a rectangle to fence it · alt-drag removes",
            pick:"click a tile to copy what's on it",
            pan:"drag to move around · scroll to zoom" }[tool] || "";
@@ -2270,13 +2401,15 @@ $("#helpBtn").onclick = () => openModal("Shortcuts", `
     <kbd>Delete</kbd><span>Clear the selection back to grass</span>
     <kbd>Ctrl</kbd>+<kbd>Z</kbd><span>Undo · add Shift to redo</span>
     <kbd>F</kbd><span>Fit the whole farm on screen</span>
-    <kbd>Esc</kbd><span>Drop the selection</span>
+    <kbd>Esc</kbd><span>Drop the selection and go back to painting</span>
   </div>
+  <p class="note"><b>Snapping a fence to a field</b> traces the connected run of identical tiles you click and wraps it, so one click fences a whole crop block without measuring anything.</p>
   <p class="note"><b>Fences</b> run along the lines between tiles rather than sitting on them, and a line is one boundary however you approach it. Rectangle mode fences all four sides at once; one-at-a-time draws single lines and drags along a run. Alt does the opposite of whichever mode you're in. Fences travel with copy and paste.</p>
   <p class="note"><b>Ground type</b> is the dropdown above the map, next to whatever you're currently painting with. Fast travel and fuel tanks have a set footprint, so picking one switches on the exact rectangle at its size — press <b>R</b> to rotate a fuel tank between 2×1 and 1×2.</p>
   <p class="note"><b>Copy and paste:</b> Select an area (M), press Copy, then click wherever you want it. It keeps the ground type and whatever's planted.</p>
   <p class="note"><b>Fixed size:</b> tick <i>Place an exact rectangle</i>, type the size, and every click drops exactly that block. The cursor is its top-left corner.</p>
   <p class="note">Mouse: scroll to zoom, right-drag or middle-drag to pan, alt-click to fill a whole plot.
+  A right-click on its own drops the selection or the thing you're pasting and returns you to the paint tool.
   Touch: pinch to zoom, and the Pan tool to move around.</p>`,
   [{label:"Close", primary:true, act:closeModal}]);
 

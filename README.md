@@ -22,7 +22,7 @@ around here costs nothing (or well, less time, no money).
 **Ground.** Mark every tile as grass, plowed, road, water, building, or locked
 (for plots you don't own yet).
 
-**Planting.** Assign a crop, tree, flower, animal, or fish to plowed land and
+**Planting.** Assign a crop, herb, tree, flower, animal, or fish to plowed land and
 water. The list ships with everything in the game and is editable in the app —
 add new content as it releases without touching the code.
 
