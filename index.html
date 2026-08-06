@@ -303,6 +303,10 @@ aside{
 }
 #status .hi{color:var(--text)}
 #status .sel{color:var(--amber)}
+.panelfoot{
+  flex:none;padding:7px 11px;border-top:1px solid var(--line);
+  font:10px/1 var(--mono);color:var(--muted);opacity:.5;
+}
 
 /* ==========================================================================
    MODAL
@@ -448,6 +452,7 @@ aside{
         </div>
       </div>
     </div>
+    <div class="panelfoot" id="stVersion" data-sha="__SHA__" data-built="__BUILD_ISO__"></div>
   </aside>
 
   <!-- ================= CENTRE: the farm ================= -->
@@ -2425,7 +2430,20 @@ function loadDoc(doc){
   $("#undoBtn").disabled = $("#redoBtn").disabled = true;
   fitView(); markDirty();
 }
+function renderVersion(){
+  const el = $("#stVersion");
+  if(!el) return;
+  const sha = el.dataset.sha, built = el.dataset.built;
+  const d = built ? new Date(built) : null;
+  if(!sha || sha.startsWith("__") || !d || isNaN(d)){
+    el.textContent = "build: dev";
+    return;
+  }
+  el.textContent = `build: ${sha} · ${d.toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"})}`;
+  el.title = `Built ${d.toISOString().replace("T"," ").slice(0,16)} UTC`;
+}
 async function boot(){
+  renderVersion();
   makeLockPattern();
   await probeStorage();
   const saved = await store.get(AUTOSAVE_KEY);
