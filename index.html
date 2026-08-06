@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- The browser tab name. Change the text between the tags. -->
 <title>Farm Together 2 — Farm Planner</title>
 <!--
   ============================================================================
@@ -196,6 +197,12 @@ aside{
 .tabpane{display:none;flex:1;flex-direction:column;min-height:0}
 .tabpane.on{display:flex}
 
+#seedNotice{
+  margin:0;padding:9px 10px;border-bottom:1px solid var(--line);
+  background:rgba(240,169,51,.09);font-size:12px;line-height:1.5;
+}
+#seedNotice b{color:var(--amber)}
+#seedNotice .row{margin-top:7px}
 #libfilters{padding:9px 10px;border-bottom:1px solid var(--line);flex:none;display:flex;flex-direction:column;gap:7px}
 #cats{display:flex;flex-wrap:wrap;gap:3px}
 #cats button{
@@ -357,9 +364,9 @@ aside{
         <h3>Fixed size</h3>
         <label class="check"><input type="checkbox" id="fixOn"> Place an exact rectangle</label>
         <div class="row tight" style="align-items:center;margin-top:7px">
-          <input class="field" id="fixW" type="number" min="1" max="400" value="3" style="width:54px">
+          <input class="field" id="fixW" type="number" min="1" max="400" value="18" style="width:54px">
           <span style="color:var(--muted)">×</span>
-          <input class="field" id="fixH" type="number" min="1" max="400" value="18" style="width:54px">
+          <input class="field" id="fixH" type="number" min="1" max="400" value="3" style="width:54px">
           <button class="btn sm icon" id="fixSwap" title="Swap width and height">⇄</button>
         </div>
         <div class="row tight" style="margin-top:6px" id="fixPresets"></div>
@@ -398,6 +405,7 @@ aside{
 
     <!-- contents -->
     <div class="tabpane on" id="pane-lib">
+      <div id="seedNotice" hidden></div>
       <div id="libfilters">
         <input class="field" id="libSearch" placeholder="Search 343 items…" autocomplete="off">
         <div id="cats"></div>
@@ -462,6 +470,14 @@ aside{
             <button class="btn sm" id="cfgApply">Resize farm</button>
           </div>
           <p class="note" style="margin:8px 0 0">Growing the farm keeps everything where it is and adds empty plots to the right and below.</p>
+        </div>
+        <div class="grp">
+          <h3>Back to the file</h3>
+          <div class="col">
+            <button class="btn sm" id="resetLib">Reset the content list</button>
+            <button class="btn sm" id="resetPre">Reset the size presets</button>
+          </div>
+          <p class="note" id="resetNote" style="margin:8px 0 0"></p>
         </div>
         <div class="grp">
           <h3>Start over</h3>
@@ -974,18 +990,41 @@ function draw(){
 
   // ---- crop names, once per run, spaced out vertically
   if($("#optLabels").checked && s>=13){
-    const step = Math.max(1, Math.round(56/s));
+    /* A field is labelled in the middle of each band of `step` rows, not at its top.
+       runTop / runH track where the field under each column starts and how tall it is,
+       so the label keeps its place in the field instead of sliding as you scroll. */
+    const step = Math.max(3, Math.round(56/s));
+    const runTop = new Int32Array(x1-x0+1), runH = new Int32Array(x1-x0+1);
+    const measure = (x,y) => {   // how far the identical run through (x,y) reaches
+      const t0 = S.type[y*S.W+x], k0 = S.item[y*S.W+x];
+      let up = y, dn = y, guard = 0;
+      while(up>0 && guard++<200){
+        const i = (up-1)*S.W+x;
+        if(S.type[i]!==t0 || S.item[i]!==k0) break;
+        up--;
+      }
+      guard = 0;
+      while(dn<S.H-1 && guard++<200){
+        const i = (dn+1)*S.W+x;
+        if(S.type[i]!==t0 || S.item[i]!==k0) break;
+        dn++;
+      }
+      runTop[x-x0] = up; runH[x-x0] = dn-up+1;
+    };
+    for(let x=x0;x<=x1;x++) measure(x, y0);
     ctx.font = `600 ${Math.min(13, Math.max(8, s*0.42))}px ui-monospace, Menlo, Consolas, monospace`;
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     for(let y=y0;y<=y1;y++){
-      if(y % step) continue;
       const base = y*S.W, cy = Math.floor(sy(y)+s/2);
       let runStart = x0, runKey = S.item[base+x0], runType = S.type[base+x0];
       for(let x=x0+1;x<=x1+1;x++){
         const k = x<=x1 ? S.item[base+x] : -1, t = x<=x1 ? S.type[base+x] : -1;
         if(k!==runKey || t!==runType){
           const it = runKey && typeOf(runType).plantable ? LIB.get(runKey) : null;
-          if(it && (x-runStart)*s >= 26){
+          const li = runStart-x0;
+          const off = Math.floor((Math.min(runH[li], step) - 1) / 2);   // centre of the band
+          const rowsIn = y - runTop[li] - off;
+          if(it && (x-runStart)*s >= 26 && rowsIn >= 0 && rowsIn % step === 0){
             const cx = Math.floor((sx(runStart)+sx(x))/2);
             const label = (x-runStart)*s >= it.name.length*7.4 ? it.name : it.code;
             ctx.fillStyle = "rgba(0,0,0,.45)"; ctx.fillText(label, cx+1, cy+1);
@@ -993,6 +1032,11 @@ function draw(){
           }
           runStart = x; runKey = k; runType = t;
         }
+      }
+      if(y<y1){   // re-measure any column whose field ends on this row
+        const b = y*S.W, nb = (y+1)*S.W;
+        for(let x=x0;x<=x1;x++)
+          if(S.type[nb+x]!==S.type[b+x] || S.item[nb+x]!==S.item[b+x]) measure(x, y+1);
       }
     }
   }
@@ -1418,6 +1462,89 @@ $("#bulkItem").onclick = () => {
      }}]);
 };
 
+/* --------------------------------------------------------------------------
+   Comparing your saved content list against SEED_LIBRARY in this file
+   -------------------------------------------------------------------------- */
+function seedList(){
+  const out = [];
+  for(const [cat, names] of Object.entries(SEED_LIBRARY)) for(const n of names) out.push({name:n, cat});
+  return out;
+}
+function libraryDiff(){
+  const seed = seedList();
+  const have = new Set(DOC.library.map(i => i.name.toLowerCase()));
+  const seedNames = new Set(seed.map(s => s.name.toLowerCase()));
+  return {
+    seed,
+    missing: seed.filter(s => !have.has(s.name.toLowerCase())),   // in the file, not in your list
+    custom:  DOC.library.filter(i => !seedNames.has(i.name.toLowerCase()))  // yours, not in the file
+  };
+}
+function renderSeedNotice(){
+  const el = $("#seedNotice"); if(!el) return;
+  const { missing } = libraryDiff();
+  if(!missing.length){ el.hidden = true; return; }
+  el.hidden = false;
+  const names = missing.slice(0,4).map(m=>m.name).join(", ");
+  el.innerHTML = `<b>${missing.length} item${missing.length>1?"s":""} in the file ${missing.length>1?"aren't":"isn't"} in your list.</b><br>
+    ${esc(names)}${missing.length>4 ? ` and ${missing.length-4} more` : ""}
+    <div class="row"><button class="btn sm" id="addSeeds">Add ${missing.length>1?"them":"it"}</button>
+    <button class="btn sm ghost" id="hideSeeds">Not now</button></div>`;
+  $("#addSeeds").onclick = () => {
+    const { missing } = libraryDiff();
+    for(const m of missing)
+      DOC.library.push({ key:DOC.nextKey++, name:m.name, cat:m.cat,
+                         color:autoColor(m.cat, m.name), code:autoCode(m.name) });
+    reindexLibrary(); renderCats(); renderLibrary(); renderSeedNotice(); renderResetNote(); markDirty();
+    flash(`Added ${missing.length} item${missing.length>1?"s":""} from the file.`);
+  };
+  $("#hideSeeds").onclick = () => { el.hidden = true; };
+}
+function renderResetNote(){
+  const el = $("#resetNote"); if(!el) return;
+  const { missing, custom } = libraryDiff();
+  const bits = [];
+  bits.push(custom.length ? `${custom.length} item${custom.length>1?"s":""} of yours ${custom.length>1?"aren't":"isn't"} in the file.`
+                          : "Your content list matches the file.");
+  if(missing.length) bits.push(`${missing.length} in the file ${missing.length>1?"aren't":"isn't"} in your list.`);
+  bits.push("Resetting restores the names, colours and codes written into index.html.");
+  el.textContent = bits.join(" ");
+}
+$("#resetPre").onclick = () => {
+  DOC.presets = DEFAULT_PRESETS.map(p => p.slice());
+  renderPresets(); markDirty(); flash("Size presets are back to the ones in the file.");
+};
+$("#resetLib").onclick = () => {
+  const fresh = buildSeedLibrary();
+  const byName = new Map(fresh.map(i => [i.name.toLowerCase(), i.key]));
+  const remap = new Map();
+  for(const it of DOC.library) remap.set(it.key, byName.get(it.name.toLowerCase()) || 0);
+  let lost = 0;
+  for(const f of DOC.farms) for(const sub of f.subs)
+    for(let i=0;i<sub.item.length;i++){
+      const k = sub.item[i];
+      if(k && !remap.get(k)) lost++;
+    }
+  const { custom } = libraryDiff();
+  const warn = `Reset the content list to what's in index.html?\n\n` +
+    (custom.length ? `${custom.length} item(s) you added will be removed.\n` : "") +
+    (lost ? `${lost.toLocaleString()} planted tile(s) across all your farms will be emptied.\n` : "") +
+    `Names, colours and short codes go back to the file's versions.\n\nThis can't be undone.`;
+  if(!confirm(warn)) return;
+  for(const f of DOC.farms) for(const sub of f.subs)
+    for(let i=0;i<sub.item.length;i++){
+      const k = sub.item[i];
+      if(k) sub.item[i] = remap.get(k) || 0;
+    }
+  DOC.library = fresh; DOC.nextKey = fresh.length+1;
+  reindexLibrary();
+  undoStack.length = redoStack.length = 0;
+  $("#undoBtn").disabled = $("#redoBtn").disabled = true;
+  setBrush(brush.type, 0);
+  renderCats(); renderLibrary(); renderReport(); renderSeedNotice(); renderResetNote(); markDirty(); draw();
+  flash(lost ? `Content list reset — ${lost.toLocaleString()} tile(s) emptied.` : "Content list reset.");
+};
+
 /* ==========================================================================
    11. REPORT
    ========================================================================== */
@@ -1712,7 +1839,7 @@ $$(".tabs button").forEach(b => b.onclick = () => {
   $$(".tabs button").forEach(x=>x.classList.toggle("on", x===b));
   $$(".tabpane").forEach(p => p.classList.toggle("on", p.id==="pane-"+b.dataset.tab));
   if(b.dataset.tab==="rep") renderReport();
-  if(b.dataset.tab==="farm"){ refreshFarmUI(); renderSlots(); renderStorageNote(); }
+  if(b.dataset.tab==="farm"){ refreshFarmUI(); renderSlots(); renderStorageNote(); renderResetNote(); }
 });
 $("#tgLeft").onclick  = () => { $("#left").classList.toggle("open"); $("#right").classList.remove("open"); };
 $("#tgRight").onclick = () => { $("#right").classList.toggle("open"); $("#left").classList.remove("open"); };
@@ -1752,6 +1879,7 @@ function loadDoc(doc){
   undoStack.length = redoStack.length = 0; sel = null; clip = null;
   setBrush(brush.type, 0);
   refreshFarmUI(); renderCats(); renderLibrary(); renderReport(); renderPresets();
+  renderSeedNotice(); renderResetNote();
   $("#undoBtn").disabled = $("#redoBtn").disabled = true;
   fitView(); markDirty();
 }
@@ -1767,6 +1895,7 @@ async function boot(){
   reindexLibrary();
   renderTools(); renderTypes(); setBrush(1, 0);
   refreshFarmUI(); renderCats(); renderLibrary(); renderReport(); renderSlots(); renderPresets();
+  renderSeedNotice(); renderResetNote();
   $("#undoBtn").disabled = $("#redoBtn").disabled = true;
   renderStorageNote();
   setSaveState(storageMode==="none" ? "no autosave here — use Export"
