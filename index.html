@@ -1,0 +1,1782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Farm Together 2 — Farm Planner</title>
+<!--
+  ============================================================================
+  FARM TOGETHER 2 — FARM PLANNER
+  ============================================================================
+  A single self-contained file. No internet needed, no install.
+  Open it in any browser. Everything below is yours to edit.
+
+  WHERE TO CHANGE THINGS
+    * Farm size / plot size ............ CONFIG block (top of the code section)
+    * Tile types & their colours ....... TILE_TYPES block
+    * Crop / tree / flower / animal /
+      fish list ........................ SEED_LIBRARY block
+      (you can also add items in the app itself — Contents tab → Add)
+    * Colours of the app chrome ........ :root in the <style> block
+    * Keyboard shortcuts ............... KEYMAP block
+
+  YOUR DESIGN IS SAVED automatically in this browser. Use Farm → Export
+  to write a .json backup you can keep alongside this file.
+  ============================================================================
+-->
+<style>
+/* ==========================================================================
+   PALETTE & TYPE
+   ========================================================================== */
+:root{
+  --ink:#171310;
+  --panel:#211b16;
+  --panel2:#2b241d;
+  --panel3:#352c23;
+  --line:#3f3428;
+  --line2:#584938;
+  --text:#f4ece0;
+  --muted:#a08e78;
+  --amber:#f0a933;
+  --sprout:#8ec44f;
+  --danger:#e0654a;
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --r:4px;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--ink); color:var(--text);
+  font:13px/1.45 var(--sans);
+  display:flex; flex-direction:column;
+  overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+button,input,select,textarea{font:inherit;color:inherit}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:var(--panel)}
+::-webkit-scrollbar-thumb{background:var(--line2);border:2px solid var(--panel);border-radius:6px}
+::-webkit-scrollbar-thumb:hover{background:var(--muted)}
+:focus-visible{outline:2px solid var(--amber);outline-offset:1px}
+
+/* ==========================================================================
+   TOP BAR
+   ========================================================================== */
+#topbar{
+  display:flex;align-items:center;gap:14px;
+  padding:0 12px;height:46px;flex:none;
+  background:var(--panel);border-bottom:1px solid var(--line);
+}
+.brand{display:flex;align-items:baseline;gap:9px;white-space:nowrap}
+.brand b{
+  font:600 12px/1 var(--mono);letter-spacing:.2em;text-transform:uppercase;
+}
+.brand span{font:11px/1 var(--mono);color:var(--muted);letter-spacing:.08em}
+.spacer{flex:1}
+.savestate{font:11px/1 var(--mono);color:var(--muted);letter-spacing:.05em;white-space:nowrap}
+.selmini{
+  background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);
+  padding:4px 6px;max-width:160px;cursor:pointer;
+}
+.selmini:hover{border-color:var(--line2)}
+.tree{display:flex;flex-direction:column;gap:2px}
+.tree .fm{display:flex;align-items:center;gap:5px;padding:5px 0 3px;border-top:1px solid var(--line)}
+.tree .fm b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tree .sb{display:flex;align-items:center;gap:5px;padding:3px 0 3px 12px;cursor:pointer;border-radius:var(--r)}
+.tree .sb:hover{background:var(--panel2)}
+.tree .sb.on{background:var(--panel3)}
+.tree .sb span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tree .sb i{font:10px/1 var(--mono);color:var(--muted);font-style:normal}
+.mini{background:transparent;border:0;color:var(--muted);cursor:pointer;padding:2px 4px;font-size:11px;border-radius:3px}
+.mini:hover{color:var(--amber);background:var(--panel2)}
+.mini.rm:hover{color:var(--danger)}
+.savestate.dirty{color:var(--amber)}
+
+/* ==========================================================================
+   BUTTONS & CONTROLS
+   ========================================================================== */
+.btn{
+  background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);
+  padding:5px 9px;cursor:pointer;white-space:nowrap;
+}
+.btn:hover{background:var(--panel3);border-color:var(--line2)}
+.btn:active{transform:translateY(1px)}
+.btn.sm{padding:3px 7px;font-size:12px}
+.btn.icon{padding:5px 8px;font:12px/1.2 var(--mono)}
+.btn.on{background:var(--amber);border-color:var(--amber);color:#241a08;font-weight:600}
+.btn.ghost{background:transparent}
+.btn.danger:hover{border-color:var(--danger);color:var(--danger)}
+.btn[disabled]{opacity:.4;cursor:not-allowed}
+.field{
+  background:var(--ink);border:1px solid var(--line);border-radius:var(--r);
+  padding:5px 7px;width:100%;
+}
+.field:focus{border-color:var(--line2)}
+input[type=color]{padding:0;height:26px;width:34px;border:1px solid var(--line);border-radius:var(--r);background:var(--ink);cursor:pointer}
+label.check{display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--muted)}
+label.check:hover{color:var(--text)}
+input[type=checkbox]{accent-color:var(--amber)}
+
+/* ==========================================================================
+   LAYOUT
+   ========================================================================== */
+#main{flex:1;display:flex;min-height:0}
+aside{
+  width:216px;flex:none;background:var(--panel);
+  display:flex;flex-direction:column;min-height:0;
+}
+#left{border-right:1px solid var(--line)}
+#right{width:280px;border-left:1px solid var(--line)}
+.panelbody{overflow-y:auto;overflow-x:hidden;flex:1;min-height:0}
+.grp{padding:10px 11px;border-bottom:1px solid var(--line)}
+.grp h3{
+  margin:0 0 8px;font:600 10px/1 var(--mono);letter-spacing:.16em;
+  text-transform:uppercase;color:var(--muted);
+}
+.row{display:flex;gap:5px;flex-wrap:wrap}
+.row.tight{gap:3px}
+.col{display:flex;flex-direction:column;gap:6px}
+
+/* tool + type buttons */
+.tool{
+  display:flex;align-items:center;gap:8px;width:100%;text-align:left;
+  background:transparent;border:1px solid transparent;border-radius:var(--r);
+  padding:5px 7px;cursor:pointer;
+}
+.tool:hover{background:var(--panel2)}
+.tool.on{background:var(--panel3);border-color:var(--line2)}
+.tool kbd{
+  margin-left:auto;font:10px/1 var(--mono);color:var(--muted);
+  border:1px solid var(--line);border-radius:3px;padding:2px 4px;
+}
+.tool.on kbd{color:var(--amber);border-color:var(--line2)}
+.sw{width:14px;height:14px;border-radius:2px;flex:none;border:1px solid rgba(0,0,0,.45)}
+.sw.lg{width:18px;height:18px}
+
+/* size presets */
+.chip{display:inline-flex;align-items:stretch;background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.chip b{padding:4px 7px;cursor:pointer;font:500 11px/1.5 var(--mono)}
+.chip b:hover{background:var(--panel3)}
+.chip i{padding:4px 5px;cursor:pointer;color:var(--muted);font:10px/1.5 var(--mono);font-style:normal;border-left:1px solid var(--line)}
+.chip i:hover{color:var(--danger);background:var(--panel3)}
+.chip.add b{color:var(--sprout)}
+
+/* brush readout */
+#brushcard{display:flex;align-items:center;gap:9px;background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);padding:8px 9px}
+#brushcard .nm{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#brushcard .sub{font:11px/1.2 var(--mono);color:var(--muted)}
+
+/* ==========================================================================
+   STAGE / CANVAS
+   ========================================================================== */
+#stage{flex:1;min-width:0;position:relative;background:var(--ink)}
+#cv{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
+#cv.panning{cursor:grabbing}
+#cv.panready{cursor:grab}
+#cv.picking{cursor:copy}
+#zoomdock{
+  position:absolute;right:10px;bottom:10px;display:flex;gap:4px;align-items:center;
+  background:rgba(33,27,22,.92);border:1px solid var(--line);border-radius:var(--r);padding:4px;
+  backdrop-filter:blur(3px);
+}
+#zoomdock .pct{font:11px/1 var(--mono);color:var(--muted);padding:0 6px;min-width:52px;text-align:center}
+
+/* ==========================================================================
+   RIGHT PANEL — TABS / LIBRARY / STATS
+   ========================================================================== */
+.tabs{display:flex;flex:none;border-bottom:1px solid var(--line);background:var(--panel2)}
+.tabs button{
+  flex:1;background:transparent;border:0;border-bottom:2px solid transparent;
+  padding:9px 4px;cursor:pointer;color:var(--muted);
+  font:600 10px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;
+}
+.tabs button:hover{color:var(--text)}
+.tabs button.on{color:var(--amber);border-bottom-color:var(--amber)}
+.tabpane{display:none;flex:1;flex-direction:column;min-height:0}
+.tabpane.on{display:flex}
+
+#libfilters{padding:9px 10px;border-bottom:1px solid var(--line);flex:none;display:flex;flex-direction:column;gap:7px}
+#cats{display:flex;flex-wrap:wrap;gap:3px}
+#cats button{
+  background:var(--panel2);border:1px solid var(--line);border-radius:99px;
+  padding:2px 9px;cursor:pointer;font-size:11px;color:var(--muted);
+}
+#cats button:hover{color:var(--text)}
+#cats button.on{background:var(--panel3);border-color:var(--line2);color:var(--text)}
+#liblist{overflow-y:auto;flex:1;min-height:0}
+.item{
+  display:flex;align-items:center;gap:8px;padding:4px 10px;cursor:pointer;
+  border-left:2px solid transparent;
+}
+.item:hover{background:var(--panel2)}
+.item.on{background:var(--panel3);border-left-color:var(--amber)}
+.item .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .ct{font:10px/1 var(--mono);color:var(--muted)}
+.item .ed{opacity:0;background:transparent;border:0;cursor:pointer;color:var(--muted);padding:2px 3px;font-size:11px}
+.item:hover .ed{opacity:1}
+.item .ed:hover{color:var(--amber)}
+.emptynote{padding:18px 12px;color:var(--muted);text-align:center;line-height:1.6}
+
+/* stats */
+.stat{display:flex;align-items:center;gap:8px;padding:3px 0;font-variant-numeric:tabular-nums}
+.stat .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stat .n{font:12px/1 var(--mono);color:var(--muted)}
+.bar{height:3px;background:var(--panel3);border-radius:2px;overflow:hidden;margin-top:2px}
+.bar i{display:block;height:100%}
+.bignum{font:600 22px/1 var(--mono);letter-spacing:-.01em}
+.kv{display:flex;justify-content:space-between;gap:8px;padding:3px 0;color:var(--muted)}
+.kv b{color:var(--text);font:12px/1.3 var(--mono);font-weight:600}
+
+/* saves */
+.slot{display:flex;align-items:center;gap:7px;padding:6px 0;border-bottom:1px solid var(--line)}
+.slot .nm{flex:1;min-width:0;overflow:hidden}
+.slot .nm b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slot .nm i{font:10px/1.4 var(--mono);color:var(--muted);font-style:normal}
+
+/* ==========================================================================
+   STATUS BAR
+   ========================================================================== */
+#status{
+  flex:none;height:26px;display:flex;align-items:center;gap:14px;padding:0 12px;
+  background:var(--panel);border-top:1px solid var(--line);
+  font:11px/1 var(--mono);color:var(--muted);letter-spacing:.03em;
+  white-space:nowrap;overflow:hidden;
+}
+#status .hi{color:var(--text)}
+#status .sel{color:var(--amber)}
+
+/* ==========================================================================
+   MODAL
+   ========================================================================== */
+#scrim{
+  position:fixed;inset:0;background:rgba(10,8,6,.72);display:none;
+  align-items:center;justify-content:center;padding:20px;z-index:50;
+}
+#scrim.on{display:flex}
+.modal{
+  background:var(--panel);border:1px solid var(--line2);border-radius:6px;
+  width:100%;max-width:440px;max-height:86vh;display:flex;flex-direction:column;
+  box-shadow:0 24px 60px rgba(0,0,0,.6);
+}
+.modal.wide{max-width:640px}
+.modal h2{
+  margin:0;padding:13px 16px;border-bottom:1px solid var(--line);
+  font:600 11px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--amber);
+}
+.modal .body{padding:16px;overflow-y:auto;display:flex;flex-direction:column;gap:12px}
+.modal .foot{padding:12px 16px;border-top:1px solid var(--line);display:flex;gap:7px;justify-content:flex-end}
+.modal label{display:block;font:10px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+.helpgrid{display:grid;grid-template-columns:auto 1fr;gap:5px 14px;align-items:baseline}
+.helpgrid kbd{
+  font:11px/1 var(--mono);border:1px solid var(--line2);border-radius:3px;
+  padding:3px 6px;background:var(--panel2);white-space:nowrap;
+}
+.note{color:var(--muted);font-size:12px;line-height:1.55}
+
+/* ==========================================================================
+   NARROW SCREENS — panels become slide-over drawers
+   ========================================================================== */
+#drawertoggles{display:none;gap:5px}
+@media (max-width:900px){
+  #drawertoggles{display:flex}
+  aside{
+    position:absolute;top:46px;bottom:26px;z-index:20;
+    box-shadow:0 0 40px rgba(0,0,0,.55);transition:transform .16s ease;
+  }
+  #left{left:0}
+  #right{right:0}
+  #left:not(.open){transform:translateX(-102%);visibility:hidden}
+  #right:not(.open){transform:translateX(102%);visibility:hidden}
+  .tool,.btn,#cats button{min-height:34px}
+  .item{padding:7px 10px}
+  .brand span{display:none}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<header id="topbar">
+  <div class="brand"><b>Farm&nbsp;Planner</b></div>
+  <select class="selmini" id="farmSel" title="Farm"></select>
+  <select class="selmini" id="subSel" title="Sub-farm"></select>
+  <span class="savestate" id="dimlabel">—</span>
+  <div id="drawertoggles">
+    <button class="btn sm" id="tgLeft">Tools</button>
+    <button class="btn sm" id="tgRight">Contents</button>
+  </div>
+  <div class="spacer"></div>
+  <span class="savestate" id="savestate">—</span>
+  <button class="btn sm" id="expTop" title="Download a .json backup">Export</button>
+  <button class="btn sm" id="undoBtn" title="Undo (Ctrl+Z)">↶</button>
+  <button class="btn sm" id="redoBtn" title="Redo (Ctrl+Shift+Z)">↷</button>
+  <button class="btn sm" id="helpBtn" title="Keyboard shortcuts">?</button>
+</header>
+
+<div id="main">
+  <!-- ================= LEFT: tools ================= -->
+  <aside id="left">
+    <div class="panelbody">
+      <div class="grp">
+        <h3>Tool</h3>
+        <div class="col" id="tools"></div>
+      </div>
+
+      <div class="grp">
+        <h3>Painting with</h3>
+        <div id="brushcard">
+          <span class="sw lg" id="brushSw"></span>
+          <div style="min-width:0">
+            <div class="nm" id="brushName">Grass</div>
+            <div class="sub" id="brushSub">tile type</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grp">
+        <h3>Tile types</h3>
+        <div class="col" id="types"></div>
+      </div>
+
+      <div class="grp">
+        <h3>Selection</h3>
+        <div class="row">
+          <button class="btn sm" id="selFill">Fill</button>
+          <button class="btn sm" id="selClear">Clear</button>
+          <button class="btn sm" id="selNone">Deselect</button>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <button class="btn sm" id="selCopy">Copy</button>
+          <button class="btn sm" id="selPaste">Paste</button>
+          <button class="btn sm" id="fillPlot" title="Fill the plot you last pointed at">Fill plot</button>
+        </div>
+      </div>
+
+      <div class="grp">
+        <h3>Fixed size</h3>
+        <label class="check"><input type="checkbox" id="fixOn"> Place an exact rectangle</label>
+        <div class="row tight" style="align-items:center;margin-top:7px">
+          <input class="field" id="fixW" type="number" min="1" max="400" value="3" style="width:54px">
+          <span style="color:var(--muted)">×</span>
+          <input class="field" id="fixH" type="number" min="1" max="400" value="18" style="width:54px">
+          <button class="btn sm icon" id="fixSwap" title="Swap width and height">⇄</button>
+        </div>
+        <div class="row tight" style="margin-top:6px" id="fixPresets"></div>
+      </div>
+
+      <div class="grp">
+        <h3>View</h3>
+        <div class="col">
+          <label class="check"><input type="checkbox" id="optGrid" checked> Tile grid</label>
+          <label class="check"><input type="checkbox" id="optPlots" checked> Plot borders</label>
+          <label class="check"><input type="checkbox" id="optLabels" checked> Names when zoomed in</label>
+          <label class="check"><input type="checkbox" id="optSnap"> Snap edits to plots</label>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ================= CENTRE: the farm ================= -->
+  <section id="stage">
+    <canvas id="cv"></canvas>
+    <div id="zoomdock">
+      <button class="btn sm icon" id="zOut">−</button>
+      <span class="pct" id="zPct">100%</span>
+      <button class="btn sm icon" id="zIn">+</button>
+      <button class="btn sm" id="zFit">Fit</button>
+    </div>
+  </section>
+
+  <!-- ================= RIGHT: contents / report / farm ================= -->
+  <aside id="right">
+    <div class="tabs">
+      <button data-tab="lib" class="on">Contents</button>
+      <button data-tab="rep">Report</button>
+      <button data-tab="farm">Farm</button>
+    </div>
+
+    <!-- contents -->
+    <div class="tabpane on" id="pane-lib">
+      <div id="libfilters">
+        <input class="field" id="libSearch" placeholder="Search 343 items…" autocomplete="off">
+        <div id="cats"></div>
+        <div class="row">
+          <button class="btn sm" id="addItem">Add</button>
+          <button class="btn sm" id="bulkItem">Add many</button>
+          <label class="check" style="margin-left:auto"><input type="checkbox" id="onlyUsed"> On farm only</label>
+        </div>
+      </div>
+      <div id="liblist"></div>
+    </div>
+
+    <!-- report -->
+    <div class="tabpane" id="pane-rep">
+      <div class="panelbody" style="padding:11px">
+        <div id="repSummary"></div>
+        <h3 style="margin:16px 0 6px;font:600 10px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Ground cover</h3>
+        <div id="repTypes"></div>
+        <h3 style="margin:16px 0 6px;font:600 10px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--muted)">Planted</h3>
+        <div id="repItems"></div>
+      </div>
+    </div>
+
+    <!-- farm -->
+    <div class="tabpane" id="pane-farm">
+      <div class="panelbody">
+        <div class="grp">
+          <h3>Farms &amp; sub-farms</h3>
+          <div class="tree" id="tree"></div>
+          <div class="row" style="margin-top:9px"><button class="btn sm" id="addFarm">Add a farm</button></div>
+          <p class="note" style="margin:8px 0 0">Each sub-farm keeps its own layout and its own size. The content list and rectangle presets are shared by all of them.</p>
+        </div>
+        <div class="grp">
+          <h3>Backup file</h3>
+          <div class="row">
+            <button class="btn sm" id="expBtn">Export .json</button>
+            <button class="btn sm" id="impBtn">Import .json</button>
+          </div>
+          <p class="note" style="margin:8px 0 0">One file holds every farm, every sub-farm and your content list.</p>
+          <p class="note" id="storageNote" style="margin:8px 0 0"></p>
+        </div>
+        <div class="grp">
+          <h3>Saved in this browser</h3>
+          <div class="row"><button class="btn sm" id="snapBtn">Save a copy…</button></div>
+          <div id="slots" style="margin-top:8px"></div>
+        </div>
+        <div class="grp">
+          <h3>Farm size</h3>
+          <div class="row tight" style="align-items:center">
+            <input class="field" id="cfgPX" type="number" min="1" max="30" style="width:52px">
+            <span style="color:var(--muted)">×</span>
+            <input class="field" id="cfgPY" type="number" min="1" max="30" style="width:52px">
+            <span style="color:var(--muted);font-size:12px">plots</span>
+          </div>
+          <div class="row tight" style="align-items:center;margin-top:6px">
+            <input class="field" id="cfgTW" type="number" min="1" max="200" style="width:52px">
+            <span style="color:var(--muted)">×</span>
+            <input class="field" id="cfgTH" type="number" min="1" max="200" style="width:52px">
+            <span style="color:var(--muted);font-size:12px">tiles per plot</span>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <button class="btn sm" id="cfgApply">Resize farm</button>
+          </div>
+          <p class="note" style="margin:8px 0 0">Growing the farm keeps everything where it is and adds empty plots to the right and below.</p>
+        </div>
+        <div class="grp">
+          <h3>Start over</h3>
+          <div class="row">
+            <button class="btn sm danger" id="wipeBtn">Clear this sub-farm</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<footer id="status">
+  <span id="stPos">—</span>
+  <span id="stTile"></span>
+  <span id="stSel" class="sel"></span>
+  <span class="spacer"></span>
+  <span id="stHint"></span>
+</footer>
+
+<div id="scrim"><div class="modal" id="modal"></div></div>
+
+<script>
+"use strict";
+/* ==========================================================================
+   1. CONFIG — edit these freely
+   ========================================================================== */
+const CONFIG = {
+  plotsX: 9,   // plots across
+  plotsY: 9,   // plots down
+  plotW: 40,   // tiles across, per plot
+  plotH: 20    // tiles down, per plot
+};
+
+/* Tile types. Add your own by appending an entry — `id` must stay unique and
+   must not change once you've saved a farm, or old saves will re-colour. */
+const TILE_TYPES = [
+  { id:0, name:"Grass",    color:"#5f8f3e", key:"G" },
+  { id:1, name:"Plowed",   color:"#7a5334", key:"P", plantable:true },
+  { id:2, name:"Road",     color:"#a89c86", key:"R" },
+  { id:3, name:"Water",    color:"#2e7fa6", key:"W", plantable:true },
+  { id:4, name:"Building", color:"#c1633f", key:"B" },
+  { id:5, name:"Locked",   color:"#35302a", key:"L", hatch:true }
+];
+
+/* Hue band per category — used only when auto-picking a colour for a new item. */
+const CAT_HUE = {
+  Crops:   [ 70, 150],
+  Trees:   [152, 196],
+  Flowers: [282, 352],
+  Animals: [ 12,  50],
+  Fish:    [186, 258],
+  Other:   [  0, 360]
+};
+
+/* KEYMAP — single-key shortcuts. */
+const KEYMAP = {
+  b:"paint", m:"select", v:"stamp", i:"pick", h:"pan",
+  g:0, p:1, r:2, w:3, "1":0, "2":1, "3":2, "4":3, "5":4, "6":5
+};
+
+const SEED_LIBRARY = {
+  Crops: [
+    "Lettuce", "Corn", "Carrot", "Beet", "Potato", "Zucchini", "Red Pepper", "Tomato",
+      "Cantaloupe Melon", "Spanish Peanut", "Lombardy Cabbage", "Melon", "Lucullus Chard",
+      "Lentil", "Wheat", "Lucky Coins", "Junin Corn", "Gladiator Parsnip", "Pumpkin",
+      "Creepy Pumpkin", "Cosmic Purple Carrot", "Carolina Potato", "Romantic Balloons",
+      "Golden Beet", "Eggplant", "Honeycomb Tomato", "Watermelon", "Delightful Gift",
+      "Beefsteak Tomato", "Chickpea", "Vitolette Potato", "Gilded Eggs", "Rye", "Yellow Pepper",
+      "Shimmering Sparkler", "Lodge Zucchini", "Concord Grape", "Chinese Eggplant",
+      "Kyoto Carrot", "Green Cabbage", "Acorn Pumpkin", "Cucumber", "Cherry Tomato", "Barley",
+      "Strawberry Red Corn", "Thomson Grape", "Cat Tinkerbells", "Canary Melon",
+      "Black Beefsteak Tomato", "Albino Eggplant", "Turnip", "Strawberry", "Green Pepper",
+      "Lobbericher Carrot", "Cherokee Tomato", "Red Cabbage", "Common Spinach",
+      "Yellow Beefsteak Tomato", "Cabernet Grape", "Yellow Cherry Tomato", "Oriole Chard",
+      "Yellow Onion", "Baby Boo Pumpkin", "Crimson Grape", "Javelin Parsnip", "Savoy Cabbage",
+      "White Garlic", "Black Cherry Tomato", "Sweet Onion", "Pineberry", "Brussels Sprouts",
+      "Red Spinach", "Red Garlic", "Napa Cabbage", "Lunar White Carrot", "Black Peppercorn",
+      "Bright Lights Chard", "Monterey Celery", "Gold Pineapple", "Arborio Rice",
+      "Albion Parsnip", "Black Garlic", "Radicchio", "Green Peppercorn", "French Bean",
+      "Rhubarb Chard", "Golden Pascal Celery", "Shallot", "Mauritius Pineapple", "Purple Garlic",
+      "Soy Bean", "Jersey Asparagus", "Pink Peppercorn", "Basmati Rice", "Flat Parsley",
+      "Hyacinth Bean", "Red Pineapple", "White Peppercorn", "Purple Sweet Asparagus",
+      "White Onion", "Chinese Pink Celery", "Black Japonica Rice", "Virginia Peanut",
+      "Curley Parsley", "Broad Bean", "Mary Washington Asparagus", "Red Onion",
+      "Red Giant Celery", "Red Aromatic Rice", "Coriander"
+  ],
+  Trees: [
+    "Apple Tree", "Lemon Tree", "Pear Tree", "Pine Tree", "Banana Tree", "Peach Tree",
+      "Orange Tree", "Money Tree", "Royal Gala Apple Tree", "Coconut Tree", "Black Mulberry",
+      "Apricot Tree", "Fruit Bat Tree", "Lime Tree", "Flowering Cherry Tree",
+      "Reinette Apple Tree", "Red Mulberry", "Bamboo", "English Holly", "Prickly Pear Cactus",
+      "Raspberry", "Fargesia Bamboo", "White Mulberry", "Plum Tree", "Burro Banana Tree",
+      "Golden Bamboo", "Tangerine Tree", "Mango", "Granny Smith Apple Tree", "Haden Mango",
+      "Hawaiian Holly", "Kent Mango", "Walnut Tree", "Quince Tree", "Mango Alphonso", "Yuzu Tree",
+      "Clove Tree", "Golden Apple Tree", "Blood Tangerine", "Black Walnut Tree", "Almond Tree",
+      "Red Dacca Banana Tree", "Ceylon Cinnamon Tree", "Blueberry", "Inkberry Holly",
+      "Wonderful Pomegranate", "Cassia Cinnamon Tree", "Livermore Walnut Tree", "Pistachio Tree",
+      "Purple Heart Pomegranate", "Blue Java Banana Tree", "Forastero Cocoa Tree",
+      "Brown Turkey Fig Tree", "Redcurrant", "Bing Cherry", "Criollo Cocoa Tree",
+      "Haku Botan Pomegranate", "Adriatic Fig Tree", "Hass Avocado", "Trinitario Cocoa Tree",
+      "Rainier Cherry", "Common Dragonfruit Tree", "Gwen Avocado", "Yellow Dragonfruit Tree",
+      "Black Pearl Cherry", "Pinkerton Avocado"
+  ],
+  Flowers: [
+    "Rose", "Marbled Poinsettia", "Daisy", "Ramanas Rose", "China Pink Tulip", "Shasta Daisy",
+      "Saffron Crocus", "Bizet Carnation", "Damask Rose", "Swan River Daisy",
+      "Common Venus Flytrap", "Orange Princess Tulip", "Provence Rose", "Domingo Carnation",
+      "Poppy", "Cape Daisy", "Arabian Mystery Tulip", "Edelweiss", "Grandiflora Rose",
+      "Iceland Poppy", "White Liberty Carnation", "Flavus Crocus", "Sevilla Tulip",
+      "Celestial Morning Glory", "Midnight Venus Flytrap", "California Poppy",
+      "Salamanca Carnation", "Noah Morning Glory", "Blue Diamond Tulips", "Arabian Poppy",
+      "African Daisy", "Silk Morning Glory", "Royal Blue Carnation", "Caldera Red Geranium",
+      "Flanders Poppy", "Pearly Morning Glory", "Velvet Venus Flytrap", "Snow Bunting Crocus",
+      "Sunforest Sunflower", "Cranesbill Geranium", "Heavenly Blue Morning Glory",
+      "Royal Blue Poinsettia", "Horizon White Geranium", "Crimson Venus Flytrap",
+      "Earthwalker Sunflower", "Sieberi Crocus", "Gatsby Pink Hydrangea", "Astro Red Poinsettia",
+      "Orange Monarch Crocus", "Italian White Sunflower", "Blue Sky Noon Geranium",
+      "Nikko Blue Hydrangea", "Sunrise Geranium", "Strawberry Blonde Sunflower",
+      "Gold Rush Poinsettia", "Limelight Hydrangea", "Suntastic Sunflower",
+      "Mars Pink Poinsettia", "Lauren's Grape Poppy", "Magical Hydrangea",
+      "Polar Bear Poinsettia", "Red Baron Hydrangea"
+  ],
+  Animals: [
+    "Leghorn Chicken", "Landrace Pig", "New Hampshire Chicken", "Hampshire Pig",
+      "Australorp Chicken", "Holstein Cow", "Unicorn", "Easter Rabbit", "Jersey Giant Chicken",
+      "Rainbow Alpaca", "Jersey Cow", "Large Black Pig", "Hampshire Sheep", "Orpington Chicken",
+      "Belted Cow", "Hereford Pig", "Merino Sheep", "Abacot Ranger Duck", "Serama Bantam Chicken",
+      "Ayrshire Cow", "Duroc Pig", "Alpine Goat", "Gotland Sheep", "Pekin Duck", "Girolando Cow",
+      "Kunekune Pig", "Black Bengal Goat", "Dutch Rabbit", "Romanov Sheep", "Duckling",
+      "Bourbon Red Turkey", "Jacob Sheep", "Suri Alpaca", "Magpie Duck", "Tyrol Grey Cow",
+      "Saanen Goat", "Netherland Dwarf Rabbit", "Black Welsh Sheep", "Norfolk Black Turkey",
+      "Cayuga Duck", "American Quarter Horse", "Australian Brown Goat", "Alaska Rabbit",
+      "Muscovy Duck", "Nigerian Dwarf Goat", "Beltsville White Turkey", "Common Peafowl",
+      "Huacaya Alpaca", "Belgian Fawn Goat", "Arabian Horse", "Flemish Giant Rabbit",
+      "Grand Noir Donkey", "Wild Turkey", "Green Peafowl", "Harlequin Rabbit", "Friesian Horse",
+      "Llama", "Royal Palm Turkey", "Miranda Donkey", "Californian Rabbit", "White Peafowl",
+      "American Paint Horse", "Ocellated Turkey", "Appaloosa Horse", "Opal Peafowl",
+      "Andalusian Donkey", "Holsteiner Horse", "Miniatura Donkey", "Provence Donkey",
+      "Asinara Donkey"
+  ],
+  Fish: [
+    "Clownfish", "Salmon", "Amber Clownfish", "Blowfish", "Crimson Salmon", "Swordfish", "Trout",
+      "Ebony Clownfish", "Viridian Salmon", "Surgeonfish", "Cocoa Blowfish", "Coral Trout",
+      "Topaz Swordfish", "Platinum Surgeonfish", "Sardine", "Cerulean Blowfish", "Brass Trout",
+      "Emerald Swordfish", "Bronze Surgeonfish", "Slinger Seabream", "Pacific Sardinella",
+      "Silver Hake", "Hottentot Seabream", "Toothfish", "Vermillion Snapper", "White Sardine",
+      "Pacific Hake", "Ginrin Koi", "Black Snapper", "Seventyfour Seabream", "Utsuri Koi",
+      "Yellowtail Snapper", "Shusui Koi", "Kikokuryu Koi", "Tancho Koi"
+  ],
+};
+
+/* ==========================================================================
+   2. STATE
+   ========================================================================== */
+const $  = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const clamp = (v,a,b) => v<a?a:v>b?b:v;
+const AUTOSAVE_KEY = "ft2planner:current";
+const SLOT_INDEX   = "ft2planner:slots";
+
+let DOC = null;        // everything: farms, sub-farms, shared content list
+let S = null;          // the sub-farm you're looking at right now
+let LIB = new Map();   // key -> item, rebuilt whenever the library changes
+let view = { x:0, y:0, s:4 };
+let tool = "paint";
+let brush = { type:1, item:0 };   // item 0 = nothing planted
+let sel = null;                   // {x0,y0,x1,y1}
+let clip = null;                  // copied region
+let hover = null, lastTile = null;
+let drag = null;
+let undoStack = [], redoStack = [];
+let dirty = false, saveTimer = null;
+
+const uid = () => "x" + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+const DEFAULT_PRESETS = [[3,18],[6,20],[20,20],[40,20]];
+
+/* One sub-farm: its own grid, its own size, its own name. */
+function blankSub(name, cfg){
+  const W = cfg.plotsX*cfg.plotW, H = cfg.plotsY*cfg.plotH;
+  return { id:uid(), name, cfg:{...cfg}, W, H,
+           type:new Uint8Array(W*H), item:new Uint16Array(W*H) };
+}
+/* The document: farms hold sub-farms; the content list is shared by all of them. */
+function blankDoc(){
+  const lib = buildSeedLibrary();
+  const farm = { id:uid(), name:"Farm A", subs:[ blankSub("Main", CONFIG) ] };
+  return { library:lib, nextKey:lib.length+1, presets:DEFAULT_PRESETS.map(p=>p.slice()),
+           farms:[farm], activeFarm:farm.id, activeSub:farm.subs[0].id };
+}
+const curFarm = () => DOC.farms.find(f=>f.id===DOC.activeFarm) || DOC.farms[0];
+function curSub(){
+  const f = curFarm();
+  return f.subs.find(s=>s.id===DOC.activeSub) || f.subs[0];
+}
+
+function buildSeedLibrary(){
+  const out = []; let k = 1;
+  for(const [cat, names] of Object.entries(SEED_LIBRARY))
+    for(const n of names) out.push({ key:k++, name:n, cat, color:autoColor(cat, n), code:autoCode(n) });
+  return out;
+}
+
+/* Deterministic colour so the same name always looks the same. */
+function hash(str){ let h=2166136261; for(let i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=Math.imul(h,16777619);} return (h>>>0)/4294967295; }
+function autoColor(cat, name){
+  const [lo,hi] = CAT_HUE[cat] || CAT_HUE.Other;
+  const t = hash(name), t2 = hash(name+"~"), t3 = hash(name+"#");
+  const hue = lo + t*(hi-lo);
+  const sat = 40 + t2*40;
+  const lit = 32 + t3*36;
+  return hsl2hex(hue, sat, lit);
+}
+function hsl2hex(h,s,l){
+  s/=100; l/=100;
+  const c=(1-Math.abs(2*l-1))*s, x=c*(1-Math.abs((h/60)%2-1)), m=l-c/2;
+  let r,g,b;
+  if(h<60)      [r,g,b]=[c,x,0];
+  else if(h<120)[r,g,b]=[x,c,0];
+  else if(h<180)[r,g,b]=[0,c,x];
+  else if(h<240)[r,g,b]=[0,x,c];
+  else if(h<300)[r,g,b]=[x,0,c];
+  else          [r,g,b]=[c,0,x];
+  const f=v=>Math.round((v+m)*255).toString(16).padStart(2,"0");
+  return "#"+f(r)+f(g)+f(b);
+}
+function autoCode(name){
+  const w = name.trim().split(/\s+/);
+  if(w.length===1) return w[0].slice(0,3).toUpperCase();
+  return w.map(s=>s[0]).join("").slice(0,3).toUpperCase();
+}
+function reindexLibrary(){
+  LIB = new Map();
+  for(const it of DOC.library) LIB.set(it.key, it);
+}
+function typeOf(id){ return TILE_TYPES.find(t=>t.id===id) || TILE_TYPES[0]; }
+
+/* ==========================================================================
+   3. STORAGE  (window.storage when hosted, localStorage when local)
+   ========================================================================== */
+/* Three possible backends, in order of preference:
+     "app"     — window.storage, available when this runs as a Claude artifact
+     "browser" — localStorage, available when the file is opened from a real URL
+     "none"    — sandboxed preview: nothing persists, export is the only way out  */
+let storageMode = "none";
+async function probeStorage(){
+  if(window.storage){
+    try{ await window.storage.set("ft2planner:probe","1"); storageMode = "app"; return; }catch(e){}
+  }
+  try{
+    localStorage.setItem("ft2planner:probe","1");
+    localStorage.removeItem("ft2planner:probe");
+    storageMode = "browser"; return;
+  }catch(e){}
+  storageMode = "none";
+}
+const store = {
+  async get(k){
+    try{
+      if(storageMode==="app"){ const r = await window.storage.get(k); return r ? r.value : null; }
+      if(storageMode==="browser") return localStorage.getItem(k);
+      return null;
+    }catch(e){ return null; }
+  },
+  async set(k,v){
+    try{
+      if(storageMode==="app"){ await window.storage.set(k,v); return true; }
+      if(storageMode==="browser"){ localStorage.setItem(k,v); return true; }
+      return false;
+    }catch(e){ return false; }
+  },
+  async del(k){
+    try{
+      if(storageMode==="app"){ await window.storage.delete(k); return; }
+      if(storageMode==="browser") localStorage.removeItem(k);
+    }catch(e){}
+  }
+};
+
+/* ==========================================================================
+   4. SAVE FORMAT — run-length encoded, readable if you open the .json
+   ========================================================================== */
+function encodeTiles(sub){
+  const runs = [];
+  let t = sub.type[0], it = sub.item[0], n = 0;
+  for(let i=0;i<sub.type.length;i++){
+    if(sub.type[i]===t && sub.item[i]===it){ n++; continue; }
+    runs.push(t+"."+it+"."+n); t=sub.type[i]; it=sub.item[i]; n=1;
+  }
+  runs.push(t+"."+it+"."+n);
+  return runs.join(";");
+}
+function decodeTiles(sub, txt){
+  let i = 0;
+  for(const run of String(txt||"").split(";")){
+    const [t,it,n] = run.split(".").map(Number);
+    if(!(n>0)) continue;
+    for(let j=0;j<n && i<sub.type.length;j++,i++){ sub.type[i]=t; sub.item[i]=it; }
+  }
+  return sub;
+}
+function serialize(){
+  return JSON.stringify({
+    format:"ft2-farm-planner", version:2, saved:new Date().toISOString(),
+    library:DOC.library, nextKey:DOC.nextKey, presets:DOC.presets,
+    activeFarm:DOC.activeFarm, activeSub:DOC.activeSub,
+    farms:DOC.farms.map(f=>({ id:f.id, name:f.name,
+      subs:f.subs.map(s=>({ id:s.id, name:s.name, cfg:s.cfg, tiles:encodeTiles(s) })) }))
+  });
+}
+function deserialize(txt){
+  const d = JSON.parse(txt);
+  if(d.format!=="ft2-farm-planner") throw new Error("That file isn't a farm planner export.");
+  const shared = {
+    library: d.library || [],
+    nextKey: d.nextKey || ((d.library||[]).length+1),
+    presets: Array.isArray(d.presets) ? d.presets : DEFAULT_PRESETS.map(p=>p.slice())
+  };
+  // version 1 files hold a single farm — lift it into the new shape
+  if(!d.farms){
+    const sub = decodeTiles(blankSub("Main", d.cfg), d.tiles);
+    const farm = { id:uid(), name:"Farm A", subs:[sub] };
+    return { ...shared, farms:[farm], activeFarm:farm.id, activeSub:sub.id };
+  }
+  const farms = d.farms.map(f => ({
+    id: f.id || uid(), name: f.name || "Farm",
+    subs: (f.subs||[]).map(s => {
+      const sub = blankSub(s.name || "Sub-farm", s.cfg || CONFIG);
+      if(s.id) sub.id = s.id;
+      return decodeTiles(sub, s.tiles);
+    })
+  })).filter(f => f.subs.length);
+  if(!farms.length) throw new Error("That file has no farms in it.");
+  const active = farms.find(f=>f.id===d.activeFarm) || farms[0];
+  const activeSub = active.subs.find(s=>s.id===d.activeSub) || active.subs[0];
+  return { ...shared, farms, activeFarm:active.id, activeSub:activeSub.id };
+}
+function markDirty(){
+  dirty = true;
+  if(storageMode==="none"){ setSaveState("export to keep this", true); return; }
+  setSaveState("unsaved changes", true);
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async ()=>{
+    const ok = await store.set(AUTOSAVE_KEY, serialize());
+    dirty = false;
+    setSaveState(ok ? "saved "+new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})
+                    : "couldn't save — use Export", !ok);
+  }, 1200);
+}
+function setSaveState(txt, warn){
+  const el = $("#savestate"); el.textContent = txt; el.classList.toggle("dirty", !!warn);
+}
+
+/* ==========================================================================
+   5. EDITS & UNDO
+   ========================================================================== */
+function normRect(r){
+  return { x0:Math.min(r.x0,r.x1), y0:Math.min(r.y0,r.y1),
+           x1:Math.max(r.x0,r.x1), y1:Math.max(r.y0,r.y1) };
+}
+function snapRect(r){
+  if(!$("#optSnap").checked) return r;
+  const {plotW:pw, plotH:ph} = S.cfg;
+  return { x0:Math.floor(r.x0/pw)*pw, y0:Math.floor(r.y0/ph)*ph,
+           x1:Math.floor(r.x1/pw)*pw+pw-1, y1:Math.floor(r.y1/ph)*ph+ph-1 };
+}
+function clampRect(r){
+  return { x0:clamp(r.x0,0,S.W-1), y0:clamp(r.y0,0,S.H-1),
+           x1:clamp(r.x1,0,S.W-1), y1:clamp(r.y1,0,S.H-1) };
+}
+
+/* Writes a rectangle. `paint(x,y)` returns [type,item] or null to skip. */
+function writeRect(rect, paint){
+  const r = clampRect(normRect(rect));
+  const idx=[], ot=[], oi=[], nt=[], ni=[];
+  for(let y=r.y0;y<=r.y1;y++){
+    for(let x=r.x0;x<=r.x1;x++){
+      const p = paint(x,y); if(!p) continue;
+      const i = y*S.W+x;
+      if(S.type[i]===p[0] && S.item[i]===p[1]) continue;
+      idx.push(i); ot.push(S.type[i]); oi.push(S.item[i]); nt.push(p[0]); ni.push(p[1]);
+    }
+  }
+  if(!idx.length) return 0;
+  const rec = { idx:Int32Array.from(idx), ot:Uint8Array.from(ot), oi:Uint16Array.from(oi),
+                nt:Uint8Array.from(nt), ni:Uint16Array.from(ni) };
+  applyRec(rec, false);
+  undoStack.push(rec); if(undoStack.length>60) undoStack.shift();
+  redoStack.length = 0;
+  afterEdit();
+  return idx.length;
+}
+function applyRec(rec, undo){
+  const t = undo?rec.ot:rec.nt, it = undo?rec.oi:rec.ni;
+  for(let k=0;k<rec.idx.length;k++){ S.type[rec.idx[k]] = t[k]; S.item[rec.idx[k]] = it[k]; }
+}
+function undo(){ const r=undoStack.pop(); if(!r) return; applyRec(r,true); redoStack.push(r); afterEdit(); }
+function redo(){ const r=redoStack.pop(); if(!r) return; applyRec(r,false); undoStack.push(r); afterEdit(); }
+function afterEdit(){
+  markDirty(); draw(); renderReport(); if($("#onlyUsed").checked) renderLibrary();
+  $("#undoBtn").disabled = !undoStack.length;
+  $("#redoBtn").disabled = !redoStack.length;
+}
+const fixOn = () => $("#fixOn").checked;
+const fixW  = () => clamp(Math.round(+$("#fixW").value)||1, 1, 400);
+const fixH  = () => clamp(Math.round(+$("#fixH").value)||1, 1, 400);
+function fixedRectAt(tx,ty){ return { x0:tx, y0:ty, x1:tx+fixW()-1, y1:ty+fixH()-1 }; }
+
+function brushPaint(){
+  const t = brush.type, plantable = typeOf(t).plantable;
+  const it = plantable ? brush.item : 0;
+  return () => [t, it];
+}
+
+/* ==========================================================================
+   6. RENDERING
+   ========================================================================== */
+const cv = $("#cv"), ctx = cv.getContext("2d", { alpha:false });
+const RULER = { l:26, t:20 };
+let dpr = 1, cssW = 0, cssH = 0, lockPattern = null;
+
+function makeLockPattern(){
+  const c = document.createElement("canvas"); c.width = c.height = 8;
+  const g = c.getContext("2d");
+  g.fillStyle = typeOf(5).color; g.fillRect(0,0,8,8);
+  g.strokeStyle = "rgba(255,255,255,.08)"; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(-2,6); g.lineTo(6,-2); g.moveTo(2,10); g.lineTo(10,2); g.stroke();
+  lockPattern = ctx.createPattern(c,"repeat");
+}
+function resize(){
+  const r = $("#stage").getBoundingClientRect();
+  dpr = window.devicePixelRatio || 1;
+  cssW = r.width; cssH = r.height;
+  cv.width = Math.round(cssW*dpr); cv.height = Math.round(cssH*dpr);
+  draw();
+}
+const paintW = () => cssW - RULER.l;
+const paintH = () => cssH - RULER.t;
+function fitView(){
+  view.s = Math.max(0.5, Math.min(paintW()/S.W, paintH()/S.H));
+  view.x = S.W/2 - paintW()/view.s/2;
+  view.y = S.H/2 - paintH()/view.s/2;
+  draw();
+}
+function clampView(){
+  const padX = paintW()/view.s*0.4, padY = paintH()/view.s*0.4;
+  view.x = clamp(view.x, -padX, S.W - paintW()/view.s + padX);
+  view.y = clamp(view.y, -padY, S.H - paintH()/view.s + padY);
+}
+function zoomAt(px, py, factor){
+  const [tx,ty] = toTileF(px,py);
+  view.s = clamp(view.s*factor, 0.4, 46);
+  view.x = tx - (px-RULER.l)/view.s;
+  view.y = ty - (py-RULER.t)/view.s;
+  clampView(); draw();
+}
+const toTileF = (px,py) => [ (px-RULER.l)/view.s + view.x, (py-RULER.t)/view.s + view.y ];
+const toTile  = (px,py) => { const [a,b]=toTileF(px,py); return [Math.floor(a), Math.floor(b)]; };
+const sx = tx => RULER.l + (tx-view.x)*view.s;
+const sy = ty => RULER.t + (ty-view.y)*view.s;
+
+function colorAt(i){
+  const t = S.type[i];
+  if(t===5) return "LOCK";
+  if(typeOf(t).plantable && S.item[i]){
+    const it = LIB.get(S.item[i]);
+    if(it) return it.color;
+  }
+  return typeOf(t).color;
+}
+
+function draw(){
+  if(!S) return;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.fillStyle = "#171310"; ctx.fillRect(0,0,cssW,cssH);
+  const s = view.s;
+
+  ctx.save();
+  ctx.beginPath(); ctx.rect(RULER.l, RULER.t, paintW(), paintH()); ctx.clip();
+
+  const x0 = clamp(Math.floor(view.x), 0, S.W-1);
+  const x1 = clamp(Math.ceil(view.x + paintW()/s), 0, S.W-1);
+  const y0 = clamp(Math.floor(view.y), 0, S.H-1);
+  const y1 = clamp(Math.ceil(view.y + paintH()/s), 0, S.H-1);
+
+  // ---- ground: horizontal runs of one colour become one rect
+  for(let y=y0;y<=y1;y++){
+    const base = y*S.W, top = Math.floor(sy(y)), bot = Math.floor(sy(y+1));
+    if(bot<=top) continue;
+    let runStart = x0, runCol = colorAt(base+x0);
+    for(let x=x0+1;x<=x1+1;x++){
+      const c = x<=x1 ? colorAt(base+x) : null;
+      if(c!==runCol){
+        const L = Math.floor(sx(runStart)), R = Math.floor(sx(x));
+        ctx.fillStyle = runCol==="LOCK" ? lockPattern : runCol;
+        ctx.fillRect(L, top, Math.max(1,R-L), bot-top);
+        runStart = x; runCol = c;
+      }
+    }
+  }
+
+  // ---- tile grid
+  if($("#optGrid").checked && s>=7){
+    ctx.strokeStyle = "rgba(0,0,0,.16)"; ctx.lineWidth = 1;
+    ctx.beginPath();
+    for(let x=x0;x<=x1+1;x++){ const p=Math.floor(sx(x))+.5; ctx.moveTo(p,RULER.t); ctx.lineTo(p,cssH); }
+    for(let y=y0;y<=y1+1;y++){ const p=Math.floor(sy(y))+.5; ctx.moveTo(RULER.l,p); ctx.lineTo(cssW,p); }
+    ctx.stroke();
+  }
+
+  // ---- crop names, once per run, spaced out vertically
+  if($("#optLabels").checked && s>=13){
+    const step = Math.max(1, Math.round(56/s));
+    ctx.font = `600 ${Math.min(13, Math.max(8, s*0.42))}px ui-monospace, Menlo, Consolas, monospace`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    for(let y=y0;y<=y1;y++){
+      if(y % step) continue;
+      const base = y*S.W, cy = Math.floor(sy(y)+s/2);
+      let runStart = x0, runKey = S.item[base+x0], runType = S.type[base+x0];
+      for(let x=x0+1;x<=x1+1;x++){
+        const k = x<=x1 ? S.item[base+x] : -1, t = x<=x1 ? S.type[base+x] : -1;
+        if(k!==runKey || t!==runType){
+          const it = runKey && typeOf(runType).plantable ? LIB.get(runKey) : null;
+          if(it && (x-runStart)*s >= 26){
+            const cx = Math.floor((sx(runStart)+sx(x))/2);
+            const label = (x-runStart)*s >= it.name.length*7.4 ? it.name : it.code;
+            ctx.fillStyle = "rgba(0,0,0,.45)"; ctx.fillText(label, cx+1, cy+1);
+            ctx.fillStyle = "rgba(255,255,255,.94)"; ctx.fillText(label, cx, cy);
+          }
+          runStart = x; runKey = k; runType = t;
+        }
+      }
+    }
+  }
+
+  // ---- plot borders
+  if($("#optPlots").checked){
+    const {plotW:pw, plotH:ph} = S.cfg;
+    ctx.strokeStyle = "rgba(0,0,0,.55)"; ctx.lineWidth = s>=3 ? 2 : 1;
+    ctx.beginPath();
+    for(let i=0;i<=S.cfg.plotsX;i++){ const p=Math.floor(sx(i*pw))+.5; ctx.moveTo(p,RULER.t); ctx.lineTo(p,cssH); }
+    for(let i=0;i<=S.cfg.plotsY;i++){ const p=Math.floor(sy(i*ph))+.5; ctx.moveTo(RULER.l,p); ctx.lineTo(cssW,p); }
+    ctx.stroke();
+  }
+
+  // ---- selection, drag preview, stamp preview, hover
+  if(sel) strokeRect(sel, "rgba(255,255,255,.9)", true);
+  if(drag && drag.mode==="rect"){
+    const r = clampRect(snapRect(normRect({x0:drag.tx0,y0:drag.ty0,x1:drag.tx1,y1:drag.ty1})));
+    if(drag.tool==="paint"){
+      ctx.globalAlpha = .55; ctx.fillStyle = brushColor();
+      ctx.fillRect(sx(r.x0), sy(r.y0), (r.x1-r.x0+1)*s, (r.y1-r.y0+1)*s);
+      ctx.globalAlpha = 1;
+    }
+    strokeRect(r, "#f0a933", true);
+    badge(r);
+  }
+  if(tool==="stamp" && clip && hover){
+    ctx.globalAlpha = .82;
+    for(let y=0;y<clip.h;y++) for(let x=0;x<clip.w;x++){
+      const tx = hover[0]+x, ty = hover[1]+y;
+      if(tx<0||ty<0||tx>=S.W||ty>=S.H) continue;
+      const i = y*clip.w+x, t = clip.type[i], k = clip.item[i];
+      const it = k && typeOf(t).plantable ? LIB.get(k) : null;
+      ctx.fillStyle = t===5 ? typeOf(5).color : (it ? it.color : typeOf(t).color);
+      ctx.fillRect(Math.floor(sx(tx)), Math.floor(sy(ty)), Math.max(1,Math.ceil(s)), Math.max(1,Math.ceil(s)));
+    }
+    ctx.globalAlpha = 1;
+    strokeRect({x0:hover[0],y0:hover[1],x1:hover[0]+clip.w-1,y1:hover[1]+clip.h-1}, "#8ec44f", true);
+  }
+  if(tool==="paint" && fixOn() && hover && !drag){
+    const r = fixedRectAt(hover[0], hover[1]);
+    ctx.globalAlpha = .55; ctx.fillStyle = brushColor();
+    ctx.fillRect(sx(r.x0), sy(r.y0), fixW()*s, fixH()*s);
+    ctx.globalAlpha = 1;
+    strokeRect(r, "#f0a933", true); badge(r);
+  }
+  if(hover && !drag && tool!=="stamp" && !(tool==="paint" && fixOn())){
+    const [hx,hy] = hover;
+    if(hx>=0&&hy>=0&&hx<S.W&&hy<S.H){
+      ctx.strokeStyle = "rgba(255,255,255,.85)"; ctx.lineWidth = 1;
+      ctx.strokeRect(Math.floor(sx(hx))+.5, Math.floor(sy(hy))+.5, Math.max(2,s-1), Math.max(2,s-1));
+    }
+  }
+  ctx.restore();
+  drawRulers(x0,x1,y0,y1);
+}
+function brushColor(){
+  if(typeOf(brush.type).plantable && brush.item){ const it=LIB.get(brush.item); if(it) return it.color; }
+  return typeOf(brush.type).color;
+}
+function strokeRect(r, color, dashed){
+  ctx.save();
+  ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+  if(dashed) ctx.setLineDash([5,3]);
+  ctx.strokeRect(Math.floor(sx(r.x0))+.5, Math.floor(sy(r.y0))+.5,
+                 (r.x1-r.x0+1)*view.s-1, (r.y1-r.y0+1)*view.s-1);
+  ctx.restore();
+}
+function badge(r){
+  const txt = `${r.x1-r.x0+1} × ${r.y1-r.y0+1}`;
+  ctx.font = "600 12px ui-monospace, Menlo, Consolas, monospace"; ctx.textAlign="left"; ctx.textBaseline="middle";
+  const w = ctx.measureText(txt).width + 14;
+  let bx = sx(r.x1+1)+8, by = sy(r.y0)-12;
+  bx = clamp(bx, RULER.l+4, cssW-w-4); by = clamp(by, RULER.t+12, cssH-16);
+  ctx.fillStyle = "rgba(23,19,16,.92)"; ctx.fillRect(bx, by-11, w, 22);
+  ctx.strokeStyle = "#f0a933"; ctx.lineWidth = 1; ctx.strokeRect(bx+.5, by-10.5, w-1, 21);
+  ctx.fillStyle = "#f0a933"; ctx.fillText(txt, bx+7, by+1);
+}
+const colName = i => String.fromCharCode(65+i%26) + (i>=26 ? Math.floor(i/26) : "");
+function drawRulers(x0,x1,y0,y1){
+  const {plotW:pw, plotH:ph} = S.cfg, s = view.s;
+  ctx.fillStyle = "#211b16";
+  ctx.fillRect(0,0,cssW,RULER.t); ctx.fillRect(0,0,RULER.l,cssH);
+  ctx.strokeStyle = "#3f3428"; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0,RULER.t-.5); ctx.lineTo(cssW,RULER.t-.5);
+  ctx.moveTo(RULER.l-.5,0); ctx.lineTo(RULER.l-.5,cssH); ctx.stroke();
+
+  ctx.font = "600 10px ui-monospace, Menlo, Consolas, monospace"; ctx.textBaseline = "middle";
+  ctx.textAlign = "center";
+  for(let i=Math.floor(x0/pw); i<=Math.floor(x1/pw); i++){
+    if(i<0||i>=S.cfg.plotsX) continue;
+    const a = sx(i*pw), b = sx((i+1)*pw);
+    if(b < RULER.l || a > cssW) continue;
+    ctx.fillStyle = "#a08e78";
+    ctx.fillText(colName(i), clamp((a+b)/2, RULER.l+9, cssW-9), RULER.t/2);
+    ctx.strokeStyle = "#3f3428"; ctx.beginPath();
+    ctx.moveTo(Math.floor(a)+.5, 3); ctx.lineTo(Math.floor(a)+.5, RULER.t-3); ctx.stroke();
+  }
+  for(let i=Math.floor(y0/ph); i<=Math.floor(y1/ph); i++){
+    if(i<0||i>=S.cfg.plotsY) continue;
+    const a = sy(i*ph), b = sy((i+1)*ph);
+    if(b < RULER.t || a > cssH) continue;
+    ctx.fillStyle = "#a08e78";
+    ctx.fillText(String(i+1), RULER.l/2, clamp((a+b)/2, RULER.t+7, cssH-7));
+    ctx.strokeStyle = "#3f3428"; ctx.beginPath();
+    ctx.moveTo(3, Math.floor(a)+.5); ctx.lineTo(RULER.l-3, Math.floor(a)+.5); ctx.stroke();
+  }
+  ctx.fillStyle = "#211b16"; ctx.fillRect(0,0,RULER.l,RULER.t);
+  $("#zPct").textContent = view.s.toFixed(view.s<10?1:0) + " px/tile";
+}
+
+/* ==========================================================================
+   7. POINTER INPUT
+   ========================================================================== */
+const pointers = new Map();
+let pinch = null;
+
+cv.addEventListener("contextmenu", e => e.preventDefault());
+cv.addEventListener("pointerdown", () => {
+  $("#left").classList.remove("open"); $("#right").classList.remove("open");
+}, true);
+cv.addEventListener("pointerdown", e => {
+  cv.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, {x:e.offsetX, y:e.offsetY});
+  if(pointers.size===2){
+    const [a,b] = [...pointers.values()];
+    pinch = { d:Math.hypot(a.x-b.x,a.y-b.y), cx:(a.x+b.x)/2, cy:(a.y+b.y)/2 };
+    drag = null; return;
+  }
+  const panning = e.button===1 || e.button===2 || tool==="pan" || spaceDown;
+  if(panning){ drag = { mode:"pan", px:e.offsetX, py:e.offsetY }; cv.className="panning"; return; }
+
+  const [tx,ty] = toTile(e.offsetX, e.offsetY);
+  if(tool==="pick"){ pickAt(tx,ty); return; }
+  if(tool==="stamp"){ stampAt(tx,ty); return; }
+  if(e.altKey){ fillPlotAt(tx,ty); return; }
+  if(tool==="paint" && fixOn()){ writeRect(fixedRectAt(tx,ty), brushPaint()); return; }
+  drag = { mode:"rect", tool, tx0:tx, ty0:ty, tx1:tx, ty1:ty };
+  draw();
+});
+cv.addEventListener("pointermove", e => {
+  if(pointers.has(e.pointerId)) pointers.set(e.pointerId, {x:e.offsetX,y:e.offsetY});
+  if(pinch && pointers.size===2){
+    const [a,b] = [...pointers.values()];
+    const d = Math.hypot(a.x-b.x, a.y-b.y);
+    zoomAt(pinch.cx, pinch.cy, d/pinch.d);
+    pinch.d = d; return;
+  }
+  hover = toTile(e.offsetX, e.offsetY);
+  if(hover[0]>=0 && hover[1]>=0 && hover[0]<S.W && hover[1]<S.H) lastTile = hover;
+  if(drag && drag.mode==="pan"){
+    view.x -= (e.offsetX-drag.px)/view.s; view.y -= (e.offsetY-drag.py)/view.s;
+    drag.px = e.offsetX; drag.py = e.offsetY; clampView(); draw(); return;
+  }
+  if(drag && drag.mode==="rect"){
+    const [tx,ty] = toTile(e.offsetX, e.offsetY);
+    drag.tx1 = clamp(tx,0,S.W-1); drag.ty1 = clamp(ty,0,S.H-1);
+  }
+  draw(); updateStatus();
+});
+function endPointer(e){
+  pointers.delete(e.pointerId);
+  if(pointers.size<2) pinch = null;
+  if(!drag) return;
+  if(drag.mode==="rect"){
+    const r = clampRect(snapRect(normRect({x0:drag.tx0,y0:drag.ty0,x1:drag.tx1,y1:drag.ty1})));
+    if(drag.tool==="paint") writeRect(r, brushPaint());
+    else { sel = r; }
+  }
+  drag = null; cv.className = tool==="pan" ? "panready" : (tool==="pick" ? "picking" : "");
+  draw(); updateStatus();
+}
+cv.addEventListener("pointerup", endPointer);
+cv.addEventListener("pointercancel", endPointer);
+cv.addEventListener("pointerleave", () => { hover=null; draw(); updateStatus(); });
+cv.addEventListener("wheel", e => {
+  e.preventDefault();
+  zoomAt(e.offsetX, e.offsetY, e.deltaY<0 ? 1.16 : 1/1.16);
+}, {passive:false});
+
+function pickAt(tx,ty){
+  if(tx<0||ty<0||tx>=S.W||ty>=S.H) return;
+  const i = ty*S.W+tx;
+  setBrush(S.type[i], S.item[i]);
+  setTool("paint");
+}
+function stampAt(tx,ty){
+  if(!clip) return;
+  writeRect({x0:tx,y0:ty,x1:tx+clip.w-1,y1:ty+clip.h-1}, (x,y)=>{
+    const i = (y-ty)*clip.w + (x-tx);
+    return [clip.type[i], clip.item[i]];
+  });
+}
+function fillPlotAt(tx,ty){
+  const {plotW:pw, plotH:ph} = S.cfg;
+  const px = Math.floor(tx/pw), py = Math.floor(ty/ph);
+  if(px<0||py<0||px>=S.cfg.plotsX||py>=S.cfg.plotsY) return;
+  writeRect({x0:px*pw, y0:py*ph, x1:px*pw+pw-1, y1:py*ph+ph-1}, brushPaint());
+}
+
+/* ==========================================================================
+   8. KEYBOARD
+   ========================================================================== */
+let spaceDown = false;
+addEventListener("keydown", e => {
+  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
+  if(e.code==="Space" && !typing){ spaceDown = true; cv.className="panready"; e.preventDefault(); }
+  if(typing) return;
+  const k = e.key.toLowerCase();
+  if((e.ctrlKey||e.metaKey) && k==="z"){ e.preventDefault(); e.shiftKey?redo():undo(); return; }
+  if((e.ctrlKey||e.metaKey) && k==="y"){ e.preventDefault(); redo(); return; }
+  if((e.ctrlKey||e.metaKey) && k==="c"){ e.preventDefault(); copySel(); return; }
+  if((e.ctrlKey||e.metaKey) && k==="v"){ e.preventDefault(); if(clip) setTool("stamp"); return; }
+  if(e.ctrlKey||e.metaKey||e.altKey) return;
+  if(k==="escape"){ sel=null; if(tool==="stamp") setTool("paint"); draw(); updateStatus(); return; }
+  if(k==="f"){ fitView(); return; }
+  if(k==="delete"||k==="backspace"){ if(sel) writeRect(sel, ()=>[0,0]); return; }
+  if(k==="enter"){ if(sel) writeRect(sel, brushPaint()); return; }
+  if(k in KEYMAP){
+    const v = KEYMAP[k];
+    if(typeof v==="string") setTool(v); else setBrush(v, brush.item);
+    e.preventDefault();
+  }
+});
+addEventListener("keyup", e => {
+  if(e.code==="Space"){ spaceDown=false; cv.className = tool==="pan" ? "panready" : (tool==="pick"?"picking":""); }
+});
+
+/* ==========================================================================
+   9. LEFT PANEL UI
+   ========================================================================== */
+const TOOLS = [
+  { id:"paint",  name:"Paint rectangle", key:"B" },
+  { id:"select", name:"Select area",     key:"M" },
+  { id:"stamp",  name:"Paste copy",      key:"V" },
+  { id:"pick",   name:"Pick from farm",  key:"I" },
+  { id:"pan",    name:"Pan",             key:"H" }
+];
+function renderTools(){
+  $("#tools").innerHTML = TOOLS.map(t =>
+    `<button class="tool ${tool===t.id?"on":""}" data-tool="${t.id}">
+       <span>${t.name}</span><kbd>${t.key}</kbd></button>`).join("");
+  $$("#tools .tool").forEach(b => b.onclick = () => setTool(b.dataset.tool));
+}
+function setTool(id){
+  if(id==="stamp" && !clip){ flash("Copy an area first — select one, then Copy."); return; }
+  tool = id; renderTools();
+  cv.className = id==="pan" ? "panready" : (id==="pick" ? "picking" : "");
+  updateStatus(); draw();
+}
+function renderTypes(){
+  $("#types").innerHTML = TILE_TYPES.map(t =>
+    `<button class="tool ${brush.type===t.id&&(!typeOf(t.id).plantable||!brush.item)?"on":""}" data-type="${t.id}">
+       <span class="sw" style="background:${t.color}"></span><span>${t.name}</span><kbd>${t.key}</kbd></button>`).join("");
+  $$("#types .tool").forEach(b => b.onclick = () => setBrush(+b.dataset.type, 0));
+}
+function setBrush(type, item){
+  brush.type = type;
+  brush.item = typeOf(type).plantable ? (item||0) : 0;
+  const it = brush.item ? LIB.get(brush.item) : null;
+  $("#brushSw").style.background = brushColor();
+  $("#brushName").textContent = it ? it.name : typeOf(type).name;
+  $("#brushSub").textContent = it ? `${it.cat.toLowerCase()} · on ${typeOf(type).name.toLowerCase()}` : "bare tile type";
+  renderTypes(); renderLibrary(); draw();
+}
+function copySel(){
+  if(!sel){ flash("Select an area first (M), then Copy."); return; }
+  const w = sel.x1-sel.x0+1, h = sel.y1-sel.y0+1;
+  const type = new Uint8Array(w*h), item = new Uint16Array(w*h);
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+    const i = (sel.y0+y)*S.W + sel.x0+x;
+    type[y*w+x] = S.type[i]; item[y*w+x] = S.item[i];
+  }
+  clip = { w, h, type, item };
+  setTool("stamp");
+  flash(`Copied ${w} × ${h} — click to paste it. Esc when you're done.`);
+  updateStatus();
+}
+$("#selFill").onclick  = () => sel ? writeRect(sel, brushPaint()) : flash("Nothing selected.");
+$("#selClear").onclick = () => sel ? writeRect(sel, ()=>[0,0])    : flash("Nothing selected.");
+$("#selCopy").onclick  = copySel;
+$("#selNone").onclick  = () => { sel=null; draw(); updateStatus(); };
+$("#fillPlot").onclick = () => {
+  const t = hover || lastTile;
+  if(!t) return flash("Point at a plot on the map first, then press this.");
+  fillPlotAt(t[0], t[1]);
+  flash(`Filled plot ${colName(Math.floor(t[0]/S.cfg.plotW))}${Math.floor(t[1]/S.cfg.plotH)+1}.`);
+};
+$("#selPaste").onclick = () => clip ? setTool("stamp") : flash("Select an area and Copy it first.");
+$("#fixSwap").onclick = () => { const w = $("#fixW").value; $("#fixW").value = $("#fixH").value; $("#fixH").value = w; draw(); };
+["fixOn","fixW","fixH"].forEach(id => { $("#"+id).oninput = draw; $("#"+id).onchange = draw; });
+function renderPresets(){
+  const el = $("#fixPresets");
+  el.innerHTML = (DOC.presets||[]).map(([w,hh],i) =>
+    `<span class="chip"><b data-use="${i}">${w}×${hh}</b><i data-drop="${i}" title="Remove this size">×</i></span>`).join("")
+    + `<span class="chip add"><b data-add="1" title="Save the size above as a preset">+ add</b></span>`;
+  $$("#fixPresets [data-use]").forEach(b => b.onclick = () => {
+    const [w,hh] = DOC.presets[+b.dataset.use];
+    $("#fixW").value = w; $("#fixH").value = hh;
+    $("#fixOn").checked = true; setTool("paint"); draw();
+  });
+  $$("#fixPresets [data-drop]").forEach(b => b.onclick = () => {
+    DOC.presets.splice(+b.dataset.drop, 1); renderPresets(); markDirty();
+  });
+  $$("#fixPresets [data-add]").forEach(b => b.onclick = () => {
+    const w = fixW(), hh = fixH();
+    if(DOC.presets.some(p => p[0]===w && p[1]===hh)) return flash(`${w}×${hh} is already saved.`);
+    if(DOC.presets.length >= 14) return flash("That's plenty of presets — remove one first.");
+    DOC.presets.push([w,hh]); renderPresets(); markDirty();
+    flash(`Saved ${w}×${hh} as a preset.`);
+  });
+}
+["optGrid","optPlots","optLabels"].forEach(id => $("#"+id).onchange = draw);
+
+/* ==========================================================================
+   10. CONTENTS (library) PANEL
+   ========================================================================== */
+let catFilter = "All";
+function categories(){
+  const set = new Set(DOC.library.map(i=>i.cat));
+  return ["All", ...[...set].sort()];
+}
+function renderCats(){
+  $("#cats").innerHTML = categories().map(c =>
+    `<button class="${catFilter===c?"on":""}" data-cat="${c}">${c}</button>`).join("");
+  $$("#cats button").forEach(b => b.onclick = () => { catFilter=b.dataset.cat; renderCats(); renderLibrary(); });
+}
+function usedKeys(){
+  const set = new Set();
+  for(let i=0;i<S.item.length;i++) if(S.item[i] && typeOf(S.type[i]).plantable) set.add(S.item[i]);
+  return set;
+}
+function renderLibrary(){
+  const q = $("#libSearch").value.trim().toLowerCase();
+  const used = $("#onlyUsed").checked ? usedKeys() : null;
+  const rows = DOC.library.filter(it =>
+      (catFilter==="All" || it.cat===catFilter) &&
+      (!q || it.name.toLowerCase().includes(q)) &&
+      (!used || used.has(it.key)));
+  $("#libSearch").placeholder = `Search ${DOC.library.length} items…`;
+  if(!rows.length){
+    $("#liblist").innerHTML = `<div class="emptynote">Nothing matches.<br>Use <b>Add</b> to put new content in the list.</div>`;
+    return;
+  }
+  $("#liblist").innerHTML = rows.map(it =>
+    `<div class="item ${brush.item===it.key?"on":""}" data-key="${it.key}">
+       <span class="sw" style="background:${it.color}"></span>
+       <span class="nm">${esc(it.name)}</span>
+       <span class="ct">${it.cat.slice(0,2).toUpperCase()}</span>
+       <button class="ed" data-edit="${it.key}" title="Edit">✎</button>
+     </div>`).join("");
+  $$("#liblist .item").forEach(el => el.onclick = e => {
+    if(e.target.dataset.edit) return;
+    const k = +el.dataset.key;
+    const it = LIB.get(k);
+    const t = (it && it.cat === "Fish") ? 3 : 1;   // fish go in water, the rest on plowed land
+    setBrush(t, k);
+  });
+  $$("#liblist .ed").forEach(b => b.onclick = e => { e.stopPropagation(); editItem(+b.dataset.edit); });
+}
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+$("#libSearch").oninput = renderLibrary;
+$("#onlyUsed").onchange = renderLibrary;
+
+$("#addItem").onclick = () => editItem(null);
+function editItem(key){
+  const it = key ? LIB.get(key) : { name:"", cat:categories()[1]||"Crops", color:"#7aa84a", code:"" };
+  const cats = [...new Set([...DOC.library.map(i=>i.cat), "Crops","Trees","Flowers","Animals","Fish","Other"])];
+  openModal(key ? "Edit item" : "Add item", `
+    <div><label>Name</label><input class="field" id="mName" value="${esc(it.name)}"></div>
+    <div><label>Category</label>
+      <select class="field" id="mCat">${cats.map(c=>`<option ${c===it.cat?"selected":""}>${esc(c)}</option>`).join("")}</select></div>
+    <div style="display:flex;gap:12px">
+      <div style="flex:1"><label>Short code on the map</label><input class="field" id="mCode" maxlength="4" value="${esc(it.code||"")}"></div>
+      <div><label>Colour</label><input type="color" id="mColor" value="${it.color}"></div>
+    </div>`,
+    [ key ? {label:"Delete", cls:"danger", act:()=>{ deleteItem(key); closeModal(); }} : null,
+      {label:"Cancel", act:closeModal},
+      {label:key?"Save":"Add", primary:true, act:()=>{
+        const name = $("#mName").value.trim(); if(!name) return;
+        const cat = $("#mCat").value, code = $("#mCode").value.trim().toUpperCase() || autoCode(name);
+        const color = $("#mColor").value;
+        if(key){ Object.assign(LIB.get(key), {name,cat,code,color}); }
+        else { const k = DOC.nextKey++; DOC.library.push({key:k,name,cat,code,color}); reindexLibrary(); }
+        closeModal(); renderCats(); renderLibrary(); markDirty(); draw(); renderReport();
+      }} ].filter(Boolean));
+  setTimeout(()=>$("#mName").focus(), 30);
+}
+function deleteItem(key){
+  const n = countKey(key);
+  if(n && !confirm(`${LIB.get(key).name} is planted on ${n.toLocaleString()} tiles. Delete it and leave those tiles bare?`)) return;
+  if(n) writeRect({x0:0,y0:0,x1:S.W-1,y1:S.H-1}, (x,y)=>{
+    const i=y*S.W+x; return S.item[i]===key ? [S.type[i],0] : null;
+  });
+  DOC.library = DOC.library.filter(i=>i.key!==key); reindexLibrary();
+  if(brush.item===key) setBrush(brush.type, 0);
+  renderCats(); renderLibrary(); renderReport(); markDirty(); draw();
+}
+function countKey(key){ let n=0; for(let i=0;i<S.item.length;i++) if(S.item[i]===key) n++; return n; }
+
+$("#bulkItem").onclick = () => {
+  const cats = [...new Set([...DOC.library.map(i=>i.cat), "Crops","Trees","Flowers","Animals","Fish","Other"])];
+  openModal("Add many items", `
+    <div><label>Category</label>
+      <select class="field" id="bCat">${cats.map(c=>`<option>${esc(c)}</option>`).join("")}</select></div>
+    <div><label>One name per line</label>
+      <textarea class="field" id="bNames" rows="9" placeholder="Rhubarb Chard&#10;Napa Cabbage&#10;Tancho Koi"></textarea></div>
+    <p class="note">Colours are picked automatically from the category. Names already in the list are skipped.</p>`,
+    [{label:"Cancel", act:closeModal},
+     {label:"Add them", primary:true, act:()=>{
+       const cat = $("#bCat").value;
+       const have = new Set(DOC.library.map(i=>i.name.toLowerCase()));
+       let added = 0;
+       for(const line of $("#bNames").value.split("\n")){
+         const name = line.trim(); if(!name || have.has(name.toLowerCase())) continue;
+         have.add(name.toLowerCase());
+         DOC.library.push({key:DOC.nextKey++, name, cat, color:autoColor(cat,name), code:autoCode(name)});
+         added++;
+       }
+       reindexLibrary(); closeModal(); renderCats(); renderLibrary(); markDirty();
+       flash(added ? `Added ${added} item${added>1?"s":""}.` : "Nothing new to add.");
+     }}]);
+};
+
+/* ==========================================================================
+   11. REPORT
+   ========================================================================== */
+function renderReport(){
+  const total = S.W*S.H;
+  const byType = new Array(TILE_TYPES.length).fill(0);
+  const byItem = new Map();
+  let plantedTiles = 0;
+  for(let i=0;i<S.type.length;i++){
+    byType[S.type[i]] = (byType[S.type[i]]||0)+1;
+    if(S.item[i] && typeOf(S.type[i]).plantable){
+      byItem.set(S.item[i], (byItem.get(S.item[i])||0)+1);
+      plantedTiles++;
+    }
+  }
+  const plantableTiles = TILE_TYPES.filter(t=>t.plantable).reduce((a,t)=>a+(byType[t.id]||0),0);
+  const {plotW:pw, plotH:ph} = S.cfg;
+  let usedPlots = 0, lockedPlots = 0;
+  for(let py=0;py<S.cfg.plotsY;py++) for(let px=0;px<S.cfg.plotsX;px++){
+    let touched = false, locked = 0;
+    for(let y=py*ph;y<py*ph+ph && !touched;y++) for(let x=px*pw;x<px*pw+pw;x++){
+      const t = S.type[y*S.W+x];
+      if(t===5) locked++;
+      else if(t!==0){ touched = true; break; }
+    }
+    if(touched) usedPlots++;
+    if(locked===pw*ph) lockedPlots++;
+  }
+  $("#repSummary").innerHTML = `
+    <div class="bignum">${plantedTiles.toLocaleString()}</div>
+    <div style="color:var(--muted);margin-bottom:10px">tiles planted of ${total.toLocaleString()}</div>
+    <div class="kv"><span>Plots in use</span><b>${usedPlots} / ${S.cfg.plotsX*S.cfg.plotsY}</b></div>
+    <div class="kv"><span>Plots locked</span><b>${lockedPlots}</b></div>
+    <div class="kv"><span>Plowed / water, empty</span><b>${(plantableTiles-plantedTiles).toLocaleString()}</b></div>
+    <div class="kv"><span>Different things grown</span><b>${byItem.size}</b></div>`;
+
+  $("#repTypes").innerHTML = TILE_TYPES.map(t => {
+    const n = byType[t.id]||0, pc = n/total*100;
+    return `<div><div class="stat"><span class="sw" style="background:${t.color}"></span>
+      <span class="nm">${t.name}</span><span class="n">${n.toLocaleString()}</span>
+      <span class="n" style="width:44px;text-align:right">${pc.toFixed(1)}%</span></div>
+      <div class="bar"><i style="width:${pc}%;background:${t.color}"></i></div></div>`;
+  }).join("");
+
+  const rows = [...byItem.entries()].sort((a,b)=>b[1]-a[1]);
+  const max = rows.length ? rows[0][1] : 1;
+  $("#repItems").innerHTML = rows.length ? rows.map(([k,n])=>{
+    const it = LIB.get(k); if(!it) return "";
+    return `<div><div class="stat"><span class="sw" style="background:${it.color}"></span>
+      <span class="nm">${esc(it.name)}</span><span class="n">${n.toLocaleString()}</span></div>
+      <div class="bar"><i style="width:${n/max*100}%;background:${it.color}"></i></div></div>`;
+  }).join("") : `<div class="emptynote">Nothing planted yet.</div>`;
+}
+
+/* ==========================================================================
+   12. FARM TAB — export, import, snapshots, resize, clear
+   ========================================================================== */
+function exportFarm(){
+  const blob = new Blob([serialize()], {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `farms-${new Date().toISOString().slice(0,10)}.json`;
+  a.click(); URL.revokeObjectURL(a.href);
+}
+$("#expBtn").onclick = exportFarm;
+$("#expTop").onclick = exportFarm;
+$("#impBtn").onclick = () => {
+  const inp = document.createElement("input");
+  inp.type = "file"; inp.accept = "application/json,.json";
+  inp.onchange = () => {
+    const f = inp.files[0]; if(!f) return;
+    const fr = new FileReader();
+    fr.onload = () => {
+      try{ loadDoc(deserialize(fr.result)); flash("Farm loaded."); }
+      catch(err){ flash("Couldn't read that file: "+err.message); }
+    };
+    fr.readAsText(f);
+  };
+  inp.click();
+};
+$("#snapBtn").onclick = () => {
+  const name = prompt("Name this copy", "Layout "+new Date().toLocaleDateString());
+  if(!name) return;
+  saveSnapshot(name.trim());
+};
+async function saveSnapshot(name){
+  const id = "s"+Date.now();
+  await store.set("ft2planner:slot:"+id, serialize());
+  const list = await slotList();
+  list.push({ id, name, at:new Date().toISOString() });
+  await store.set(SLOT_INDEX, JSON.stringify(list));
+  renderSlots(); flash("Saved a copy.");
+}
+async function slotList(){
+  try{ return JSON.parse(await store.get(SLOT_INDEX)) || []; }catch(e){ return []; }
+}
+async function renderSlots(){
+  const list = await slotList();
+  const el = $("#slots");
+  if(!list.length){ el.innerHTML = `<div class="note">No copies yet. A copy is a snapshot you can come back to.</div>`; return; }
+  el.innerHTML = list.slice().reverse().map(s =>
+    `<div class="slot"><div class="nm"><b>${esc(s.name)}</b><i>${new Date(s.at).toLocaleString()}</i></div>
+      <button class="btn sm" data-load="${s.id}">Open</button>
+      <button class="btn sm danger" data-del="${s.id}">×</button></div>`).join("");
+  $$("#slots [data-load]").forEach(b => b.onclick = async () => {
+    const txt = await store.get("ft2planner:slot:"+b.dataset.load);
+    if(!txt) return flash("That copy is missing.");
+    if(dirty && !confirm("Open this copy? Unsaved changes to the current farm are kept in the autosave until you edit again.")) return;
+    try{ loadDoc(deserialize(txt)); flash("Opened."); }catch(e){ flash("Couldn't open: "+e.message); }
+  });
+  $$("#slots [data-del]").forEach(b => b.onclick = async () => {
+    if(!confirm("Delete this copy?")) return;
+    await store.del("ft2planner:slot:"+b.dataset.del);
+    await store.set(SLOT_INDEX, JSON.stringify((await slotList()).filter(s=>s.id!==b.dataset.del)));
+    renderSlots();
+  });
+}
+$("#cfgApply").onclick = () => {
+  const cfg = { plotsX:+$("#cfgPX").value, plotsY:+$("#cfgPY").value,
+                plotW:+$("#cfgTW").value, plotH:+$("#cfgTH").value };
+  for(const v of Object.values(cfg)) if(!(v>=1 && v<=200)) return flash("Sizes must be between 1 and 200.");
+  const nW = cfg.plotsX*cfg.plotW, nH = cfg.plotsY*cfg.plotH;
+  if(nW*nH > 400000) return flash("That's over 400,000 tiles — too big to stay smooth.");
+  const shrinking = nW < S.W || nH < S.H;
+  if(shrinking && !confirm("The farm gets smaller — anything outside the new edge is thrown away. Continue?")) return;
+  const type = new Uint8Array(nW*nH), item = new Uint16Array(nW*nH);
+  for(let y=0;y<Math.min(nH,S.H);y++) for(let x=0;x<Math.min(nW,S.W);x++){
+    type[y*nW+x] = S.type[y*S.W+x]; item[y*nW+x] = S.item[y*S.W+x];
+  }
+  S.cfg = cfg; S.W = nW; S.H = nH; S.type = type; S.item = item;
+  undoStack.length = redoStack.length = 0; sel = null;
+  afterEdit(); refreshFarmUI(); fitView(); flash(`${S.name} is now ${nW} × ${nH} tiles.`);
+};
+$("#wipeBtn").onclick = () => {
+  if(!confirm(`Set every tile in "${S.name}" back to grass? Other sub-farms and your content list are untouched.`)) return;
+  writeRect({x0:0,y0:0,x1:S.W-1,y1:S.H-1}, ()=>[0,0]);
+};
+function renderStorageNote(){
+  const el = $("#storageNote"); if(!el) return;
+  el.innerHTML = {
+    app:     "Autosave is on — your farm is kept with this conversation.",
+    browser: "Autosave is on — your farm is kept in this browser on this device.",
+    none:    "<b style='color:var(--amber)'>Autosave is off here.</b> This preview blocks storage, so nothing is kept when you close it. Export before you leave, and import the file to pick up where you left off."
+  }[storageMode];
+}
+/* ---- farm / sub-farm management ---- */
+function switchSub(farmId, subId){
+  if(DOC.activeFarm===farmId && DOC.activeSub===subId) return;
+  DOC.activeFarm = farmId; DOC.activeSub = subId;
+  S = curSub();
+  undoStack.length = redoStack.length = 0; sel = null;
+  $("#undoBtn").disabled = $("#redoBtn").disabled = true;
+  refreshFarmUI(); renderReport(); fitView(); markDirty();
+  flash(`Now editing ${curFarm().name} · ${S.name}.`);
+}
+function refreshFarmUI(){
+  const f = curFarm();
+  $("#farmSel").innerHTML = DOC.farms.map(x =>
+    `<option value="${x.id}" ${x.id===f.id?"selected":""}>${esc(x.name)}</option>`).join("");
+  $("#subSel").innerHTML = f.subs.map(x =>
+    `<option value="${x.id}" ${x.id===S.id?"selected":""}>${esc(x.name)}</option>`).join("");
+  syncCfgInputs(); renderTree();
+}
+function renderTree(){
+  const el = $("#tree"); if(!el) return;
+  el.innerHTML = DOC.farms.map(f => `
+    <div class="fm">
+      <b>${esc(f.name)}</b>
+      <button class="mini" data-rf="${f.id}" title="Rename">✎</button>
+      <button class="mini" data-af="${f.id}" title="Add a sub-farm">＋</button>
+      <button class="mini rm" data-df="${f.id}" title="Delete this farm">×</button>
+    </div>
+    ${f.subs.map(s => `
+      <div class="sb ${s.id===S.id?"on":""}" data-go="${f.id}|${s.id}">
+        <span>${esc(s.name)}</span>
+        <i>${s.cfg.plotsX*s.cfg.plotW}×${s.cfg.plotsY*s.cfg.plotH}</i>
+        <button class="mini" data-rs="${f.id}|${s.id}" title="Rename">✎</button>
+        <button class="mini" data-cs="${f.id}|${s.id}" title="Duplicate">⧉</button>
+        <button class="mini rm" data-ds="${f.id}|${s.id}" title="Delete">×</button>
+      </div>`).join("")}`).join("");
+
+  const pair = v => { const [a,b] = v.split("|"); return [DOC.farms.find(f=>f.id===a), b]; };
+  $$("#tree [data-go]").forEach(b => b.onclick = e => {
+    if(e.target.dataset.rs || e.target.dataset.ds || e.target.dataset.cs) return;
+    const [f,s] = pair(b.dataset.go); switchSub(f.id, s);
+  });
+  $$("#tree [data-rf]").forEach(b => b.onclick = () => {
+    const f = DOC.farms.find(x=>x.id===b.dataset.rf);
+    const n = prompt("Rename this farm", f.name); if(n===null) return;
+    f.name = n.trim() || f.name; refreshFarmUI(); markDirty();
+  });
+  $$("#tree [data-af]").forEach(b => b.onclick = () => {
+    const f = DOC.farms.find(x=>x.id===b.dataset.af);
+    const n = prompt("Name the new sub-farm", "Sub-farm "+(f.subs.length+1)); if(n===null) return;
+    const sub = blankSub(n.trim() || "Sub-farm", CONFIG);
+    f.subs.push(sub); switchSub(f.id, sub.id);
+  });
+  $$("#tree [data-df]").forEach(b => b.onclick = () => {
+    if(DOC.farms.length<2) return flash("You need at least one farm.");
+    const f = DOC.farms.find(x=>x.id===b.dataset.df);
+    if(!confirm(`Delete "${f.name}" and its ${f.subs.length} sub-farm(s)? This can't be undone.`)) return;
+    DOC.farms = DOC.farms.filter(x=>x.id!==f.id);
+    const nf = DOC.farms[0]; switchSub(nf.id, nf.subs[0].id); markDirty(); renderTree();
+  });
+  $$("#tree [data-rs]").forEach(b => b.onclick = e => {
+    e.stopPropagation();
+    const [f,id] = pair(b.dataset.rs), s = f.subs.find(x=>x.id===id);
+    const n = prompt("Rename this sub-farm", s.name); if(n===null) return;
+    s.name = n.trim() || s.name; refreshFarmUI(); markDirty();
+  });
+  $$("#tree [data-cs]").forEach(b => b.onclick = e => {
+    e.stopPropagation();
+    const [f,id] = pair(b.dataset.cs), s = f.subs.find(x=>x.id===id);
+    const copy = blankSub(s.name+" copy", s.cfg);
+    copy.type.set(s.type); copy.item.set(s.item);
+    f.subs.splice(f.subs.indexOf(s)+1, 0, copy);
+    switchSub(f.id, copy.id);
+  });
+  $$("#tree [data-ds]").forEach(b => b.onclick = e => {
+    e.stopPropagation();
+    const [f,id] = pair(b.dataset.ds), s = f.subs.find(x=>x.id===id);
+    if(f.subs.length<2) return flash("A farm needs at least one sub-farm.");
+    if(!confirm(`Delete "${s.name}"? This can't be undone.`)) return;
+    f.subs = f.subs.filter(x=>x.id!==id);
+    if(S.id===id) switchSub(f.id, f.subs[0].id); else { renderTree(); markDirty(); }
+  });
+}
+$("#addFarm").onclick = () => {
+  const n = prompt("Name the new farm", "Farm "+String.fromCharCode(65+DOC.farms.length));
+  if(n===null) return;
+  const farm = { id:uid(), name:n.trim() || "Farm", subs:[ blankSub("Main", CONFIG) ] };
+  DOC.farms.push(farm); switchSub(farm.id, farm.subs[0].id);
+};
+$("#farmSel").onchange = e => {
+  const f = DOC.farms.find(x=>x.id===e.target.value);
+  switchSub(f.id, f.subs[0].id);
+};
+$("#subSel").onchange = e => switchSub(curFarm().id, e.target.value);
+
+function syncCfgInputs(){
+  $("#cfgPX").value = S.cfg.plotsX; $("#cfgPY").value = S.cfg.plotsY;
+  $("#cfgTW").value = S.cfg.plotW;  $("#cfgTH").value = S.cfg.plotH;
+  $("#dimlabel").textContent = `${S.cfg.plotsX}×${S.cfg.plotsY} plots · ${S.W}×${S.H}`;
+}
+
+/* ==========================================================================
+   13. MODAL, STATUS, TABS, DRAWERS
+   ========================================================================== */
+function openModal(title, bodyHTML, buttons){
+  $("#modal").className = "modal";
+  $("#modal").innerHTML = `<h2>${esc(title)}</h2><div class="body">${bodyHTML}</div><div class="foot"></div>`;
+  const foot = $("#modal .foot");
+  buttons.forEach(b => {
+    const el = document.createElement("button");
+    el.className = "btn" + (b.primary?" on":"") + (b.cls?" "+b.cls:"");
+    el.textContent = b.label; el.onclick = b.act; foot.appendChild(el);
+  });
+  $("#scrim").classList.add("on");
+}
+function closeModal(){ $("#scrim").classList.remove("on"); }
+$("#scrim").onclick = e => { if(e.target.id==="scrim") closeModal(); };
+
+let flashTimer = null;
+function flash(msg){
+  $("#stHint").textContent = msg;
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(()=>{ flashTimer = null; $("#stHint").textContent = defaultHint(); }, 4000);
+}
+function defaultHint(){
+  if(tool==="paint" && fixOn()) return `click to place a ${fixW()} × ${fixH()} block · right-drag pans`;
+  return { paint:"drag to paint a rectangle · alt-click fills a plot · right-drag pans",
+           select:"drag to select · then Fill, Clear or Copy",
+           stamp:"click to paste the copied area · esc to stop",
+           pick:"click a tile to copy what's on it",
+           pan:"drag to move around · scroll to zoom" }[tool] || "";
+}
+function updateStatus(){
+  if(hover && hover[0]>=0 && hover[1]>=0 && hover[0]<S.W && hover[1]<S.H){
+    const [x,y] = hover, i = y*S.W+x;
+    const px = Math.floor(x/S.cfg.plotW), py = Math.floor(y/S.cfg.plotH);
+    const it = S.item[i] && typeOf(S.type[i]).plantable ? LIB.get(S.item[i]) : null;
+    $("#stPos").innerHTML = `<span class="hi">${x}, ${y}</span> · plot ${colName(px)}${py+1}`;
+    $("#stTile").textContent = typeOf(S.type[i]).name + (it ? " · "+it.name : "");
+  }else{
+    $("#stPos").textContent = "—"; $("#stTile").textContent = "";
+  }
+  $("#stSel").textContent = sel ? `selected ${sel.x1-sel.x0+1} × ${sel.y1-sel.y0+1}`
+                          : (clip ? `clipboard ${clip.w} × ${clip.h}` : "");
+  if(!flashTimer) $("#stHint").textContent = defaultHint();
+}
+$$(".tabs button").forEach(b => b.onclick = () => {
+  $$(".tabs button").forEach(x=>x.classList.toggle("on", x===b));
+  $$(".tabpane").forEach(p => p.classList.toggle("on", p.id==="pane-"+b.dataset.tab));
+  if(b.dataset.tab==="rep") renderReport();
+  if(b.dataset.tab==="farm"){ refreshFarmUI(); renderSlots(); renderStorageNote(); }
+});
+$("#tgLeft").onclick  = () => { $("#left").classList.toggle("open"); $("#right").classList.remove("open"); };
+$("#tgRight").onclick = () => { $("#right").classList.toggle("open"); $("#left").classList.remove("open"); };
+$("#zIn").onclick  = () => zoomAt(RULER.l+paintW()/2, RULER.t+paintH()/2, 1.35);
+$("#zOut").onclick = () => zoomAt(RULER.l+paintW()/2, RULER.t+paintH()/2, 1/1.35);
+$("#zFit").onclick = fitView;
+$("#undoBtn").onclick = undo;
+$("#redoBtn").onclick = redo;
+$("#helpBtn").onclick = () => openModal("Shortcuts", `
+  <div class="helpgrid">
+    <kbd>B</kbd><span>Paint rectangle</span>
+    <kbd>M</kbd><span>Select area</span>
+    <kbd>V</kbd><span>Paste what you copied</span>
+    <kbd>I</kbd><span>Pick up what's on a tile</span>
+    <kbd>H</kbd> / <span>hold <b>space</b> — pan</span>
+    <kbd>G P R W</kbd><span>Grass, plowed, road, water</span>
+    <kbd>1</kbd>–<kbd>6</kbd><span>Tile types in order</span>
+    <kbd>Ctrl</kbd>+<kbd>C</kbd><span>Copy the selection</span>
+    <kbd>Ctrl</kbd>+<kbd>V</kbd><span>Switch to stamping</span>
+    <kbd>Enter</kbd><span>Fill the selection with the current brush</span>
+    <kbd>Delete</kbd><span>Clear the selection back to grass</span>
+    <kbd>Ctrl</kbd>+<kbd>Z</kbd><span>Undo · add Shift to redo</span>
+    <kbd>F</kbd><span>Fit the whole farm on screen</span>
+    <kbd>Esc</kbd><span>Drop the selection</span>
+  </div>
+  <p class="note"><b>Copy and paste:</b> Select an area (M), press Copy, then click wherever you want it. It keeps the ground type and whatever's planted.</p>
+  <p class="note"><b>Fixed size:</b> tick <i>Place an exact rectangle</i>, type the size, and every click drops exactly that block. The cursor is its top-left corner.</p>
+  <p class="note">Mouse: scroll to zoom, right-drag or middle-drag to pan, alt-click to fill a whole plot.
+  Touch: pinch to zoom, and the Pan tool to move around.</p>`,
+  [{label:"Close", primary:true, act:closeModal}]);
+
+/* ==========================================================================
+   14. START UP
+   ========================================================================== */
+function loadDoc(doc){
+  DOC = doc; S = curSub(); reindexLibrary();
+  undoStack.length = redoStack.length = 0; sel = null; clip = null;
+  setBrush(brush.type, 0);
+  refreshFarmUI(); renderCats(); renderLibrary(); renderReport(); renderPresets();
+  $("#undoBtn").disabled = $("#redoBtn").disabled = true;
+  fitView(); markDirty();
+}
+async function boot(){
+  makeLockPattern();
+  await probeStorage();
+  const saved = await store.get(AUTOSAVE_KEY);
+  let st = null;
+  if(saved){ try{ st = deserialize(saved); }catch(e){ st = null; } }
+  DOC = st || blankDoc();
+  if(!Array.isArray(DOC.presets)) DOC.presets = DEFAULT_PRESETS.map(p=>p.slice());
+  S = curSub();
+  reindexLibrary();
+  renderTools(); renderTypes(); setBrush(1, 0);
+  refreshFarmUI(); renderCats(); renderLibrary(); renderReport(); renderSlots(); renderPresets();
+  $("#undoBtn").disabled = $("#redoBtn").disabled = true;
+  renderStorageNote();
+  setSaveState(storageMode==="none" ? "no autosave here — use Export"
+             : (saved ? "loaded your last farm" : "new farm"), storageMode==="none");
+  if(storageMode==="none") flash("Saving is off in this preview — use Export to keep your work.");
+  new ResizeObserver(resize).observe($("#stage"));
+  resize(); fitView(); updateStatus();
+}
+addEventListener("beforeunload", e => { if(dirty){ e.preventDefault(); e.returnValue = ""; } });
+boot();
+</script>
+</body>
+</html>
